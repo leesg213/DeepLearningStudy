@@ -28,7 +28,7 @@ private:
     id<MTLDevice> _device;
     id<MTLCommandQueue> _cmdQueue;
     id<MTLBuffer> _weights;
-    id<MTLComputePipelineState> _pipelineComputeCosts;
+    id<MTLComputePipelineState> _pipelineComputeCosts, _pipelineComputeGrads;
     
     void Forward(std::vector<uint8_t> const& trainData, bool isCat);
     float CalcCost(id<MTLBuffer> allCosts, size_t numImages);

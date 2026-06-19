@@ -41,6 +41,7 @@ typedef NS_ENUM(EnumBackingType, TextureIndex)
 
 typedef struct
 {
+    uint32_t numImages;
     uint32_t imageDataLength;
     
 } Uniforms;

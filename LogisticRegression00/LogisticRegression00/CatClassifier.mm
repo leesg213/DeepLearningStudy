@@ -24,6 +24,11 @@ void CatClassifier::Init(id<MTLDevice> inDevice)
     {
         NSLog(@"Failed to load pipeline. %@", error.localizedDescription);
     }
+    _pipelineComputeGrads = [_device newComputePipelineStateWithFunction:[defaultLibrary newFunctionWithName:@"computeGrads"] error:&error];
+    if(error != nil)
+    {
+        NSLog(@"Failed to load pipeline. %@", error.localizedDescription);
+    }
 }
 
 float CatClassifier::CalcCost(id<MTLBuffer> allCosts, size_t numImages)
@@ -93,10 +98,12 @@ void CatClassifier::Train(std::vector<std::vector<uint8_t>> const& trainData,
     
     id<MTLBuffer> uniforms = [_device newBufferWithLength:sizeof(Uniforms) options:MTLResourceStorageModeShared];
     Uniforms* uniforms_data = (Uniforms*)uniforms.contents;
+    uniforms_data->numImages = numImages;
     uniforms_data->imageDataLength = imageDataLength;
     
     id<MTLBuffer> outCosts = [_device newBufferWithLength:numImages*sizeof(float) options:MTLResourceStorageModeShared];
     id<MTLBuffer> outActivations = [_device newBufferWithLength:numImages*sizeof(float) options:MTLResourceStorageModeShared];
+    id<MTLBuffer> outGrads = [_device newBufferWithLength:(imageDataLength+1)*sizeof(float) options:MTLResourceStorageModeShared];
 
     id<MTLBuffer> trainingDataBuffer = [_device newBufferWithLength:numImages*imageDataLength options:(MTLResourceCPUCacheModeDefaultCache | MTLResourceStorageModeShared)];
     memcpy(trainingDataBuffer.contents, &trainData[0],numImages*imageDataLength);
@@ -144,6 +151,14 @@ void CatClassifier::Train(std::vector<std::vector<uint8_t>> const& trainData,
         [encoder setBuffer:outActivations offset:0 atIndex:5];
         [encoder dispatchThreads:MTLSizeMake(numImages, 1, 1) threadsPerThreadgroup:MTLSizeMake(32, 1, 1)];
         
+        [encoder setComputePipelineState:_pipelineComputeGrads];
+        [encoder setBuffer:trainingDataBuffer offset:0 atIndex: 0];
+        [encoder setBuffer:isCatDataBuffer offset:0 atIndex: 1];
+        [encoder setBuffer:outActivations offset:0 atIndex: 2];
+        [encoder setBuffer:outGrads offset:0 atIndex: 3];
+        [encoder setBuffer:uniforms offset:0 atIndex:4];
+        [encoder dispatchThreads:MTLSizeMake(imageDataLength+1, 1, 1) threadsPerThreadgroup:MTLSizeMake(32, 1, 1)];
+        
         [encoder endEncoding];
         [cmdBuffer commit];
         [cmdBuffer waitUntilCompleted];
@@ -151,16 +166,17 @@ void CatClassifier::Train(std::vector<std::vector<uint8_t>> const& trainData,
         float cost = CalcCost(outCosts, numImages);
         std::vector<float> dW;
         float dB;
-        CalcGrad(trainData, outActivations, isCatData, dW, dB);
+        //CalcGrad(trainData, outActivations, isCatData, dW, dB);
         NSLog(@"Cost : %f", cost);
         
+        float* gradValues = (float*)outGrads.contents;
         // Update weights
         float* weight_values = (float*)_weights.contents;
         for(int i = 0;i<dW.size();++i)
         {
-            weight_values[i+1] = weight_values[i+1] - learningRate * dW[i];
+            weight_values[i+1] = weight_values[i+1] - learningRate * gradValues[i+1];
         }
-        weight_values[0] = weight_values[0] - learningRate*dB;
+        weight_values[0] = weight_values[0] - learningRate*gradValues[0];
         
         if(captureManager)
         {

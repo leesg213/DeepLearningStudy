@@ -43,6 +43,24 @@ kernel void computeCost(device uint8_t* training_data [[buffer(0)]],
     // Calc cost
     outCosts[thread_id] = cost;
 }
+
+kernel void computeGrads(device uint8_t* training_data [[buffer(0)]],
+                        device uint8_t* isCat_data [[buffer(1)]],
+                        device float* allActivations [[buffer(2)]],
+                        device float* outGrads [[buffer(3)]],
+                        constant Uniforms& uniforms [[buffer(4)]],
+                        uint thread_id [[thread_position_in_grid]])
+{
+    float dotProduct = 0;
+    for(int i = 0;i<uniforms.numImages;++i)
+    {
+        float training_value = thread_id == 0 ? 1 : (training_data[i*uniforms.imageDataLength+(thread_id-1)]/255.0f);
+        dotProduct += training_value * (allActivations[i] - isCat_data[i]);
+    }
+    dotProduct /= uniforms.numImages;
+    outGrads[thread_id] = dotProduct;
+}
+
 kernel void network(device uint8_t& training_data [[buffer(0)]],
                     device float& weights [[buffer(1)]])
 {
