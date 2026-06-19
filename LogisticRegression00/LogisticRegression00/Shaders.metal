@@ -14,13 +14,15 @@
 
 float sigmod(float inValue)
 {
-    return 1.0f / (1 + metal::exp(-inValue));
+    float epsilon = 0.000001f;
+    return metal::clamp((1.0f / (1 + metal::exp(-inValue))),epsilon,1-epsilon);
 }
 kernel void computeCost(device uint8_t* training_data [[buffer(0)]],
                         device uint8_t* isCat_data [[buffer(1)]],
                         device float* weights [[buffer(2)]],
                         constant Uniforms& uniforms [[buffer(3)]],
                         device float* outCosts [[buffer(4)]],
+                        device float* outActivations [[buffer(5)]],
                         uint thread_id [[thread_position_in_grid]])
 {
     device uint8_t* current_training_data = &training_data[uniforms.imageDataLength*thread_id];
@@ -35,8 +37,11 @@ kernel void computeCost(device uint8_t* training_data [[buffer(0)]],
     A += weights[0];
     A = sigmod(A);
     
+    outActivations[thread_id] = A;
+    
+    float cost = isCat*metal::log(A)+(1-isCat)*metal::log(1-A);
     // Calc cost
-    outCosts[thread_id] = isCat*metal::log(A)+(1-isCat)*metal::log(1-A);
+    outCosts[thread_id] = cost;
 }
 kernel void network(device uint8_t& training_data [[buffer(0)]],
                     device float& weights [[buffer(1)]])

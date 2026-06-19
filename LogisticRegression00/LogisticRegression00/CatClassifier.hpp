@@ -31,6 +31,8 @@ private:
     id<MTLComputePipelineState> _pipelineComputeCosts;
     
     void Forward(std::vector<uint8_t> const& trainData, bool isCat);
+    float CalcCost(id<MTLBuffer> allCosts, size_t numImages);
+    void CalcGrad(std::vector<std::vector<uint8_t>> const& trainData, id<MTLBuffer> allActivations, std::vector<uint8_t> const& isCatData, std::vector<float>& outDw, float& outDb);
     
 };
 

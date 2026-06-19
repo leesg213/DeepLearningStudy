@@ -84,7 +84,7 @@
     trainingData.resize(TRAINING_IMAGE_WIDTH*TRAINING_IMAGE_WIDTH*3);
     
     processNextImage = ^{
-        if (currentIndex < imagePaths.count && currentIndex<100) {
+        if (currentIndex < imagePaths.count && currentIndex<1000) {
             NSString *imagePath = imagePaths[currentIndex];
             
             // Load and display the image
