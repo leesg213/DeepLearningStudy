@@ -720,10 +720,26 @@
                                     <action selector="startTraining:" target="XfG-lQ-9wD" id="v5c-Md-Sgm"/>
                                 </connections>
                             </button>
+                            <button verticalHuggingPriority="750" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="Vex-rV-dO9">
+                                <rect key="frame" x="415" y="556" width="68" height="24"/>
+                                <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
+                                <buttonCell key="cell" type="push" title="Predict" bezelStyle="rounded" alignment="center" borderStyle="border" imageScaling="proportionallyDown" inset="2" id="x7l-xV-RQx">
+                                    <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
+                                    <font key="font" metaFont="system"/>
+                                </buttonCell>
+                                <connections>
+                                    <action selector="predict:" target="XfG-lQ-9wD" id="PS8-le-tMB"/>
+                                </connections>
+                            </button>
                             <imageView horizontalHuggingPriority="251" verticalHuggingPriority="251" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="Dde-gz-xaO">
                                 <rect key="frame" x="24" y="277" width="360" height="249"/>
                                 <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
                                 <imageCell key="cell" refusesFirstResponder="YES" alignment="left" imageScaling="proportionallyDown" imageFrameStyle="grayBezel" id="yQ7-vY-6EB"/>
+                            </imageView>
+                            <imageView horizontalHuggingPriority="251" verticalHuggingPriority="251" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="laA-HG-ufr" userLabel="Predict Image Well">
+                                <rect key="frame" x="412" y="277" width="360" height="249"/>
+                                <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
+                                <imageCell key="cell" refusesFirstResponder="YES" alignment="left" animates="YES" imageScaling="proportionallyDown" imageFrameStyle="grayBezel" id="tLt-Nx-wZe"/>
                             </imageView>
                             <textField focusRingType="none" horizontalHuggingPriority="251" verticalHuggingPriority="750" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="nPa-4Y-B1r" userLabel="StatusLabel">
                                 <rect key="frame" x="27" y="531" width="356" height="16"/>
@@ -734,10 +750,21 @@
                                     <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
                                 </textFieldCell>
                             </textField>
+                            <textField focusRingType="none" horizontalHuggingPriority="251" verticalHuggingPriority="750" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="KOU-gh-wkk" userLabel="PredictLabel">
+                                <rect key="frame" x="413" y="531" width="356" height="16"/>
+                                <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
+                                <textFieldCell key="cell" lineBreakMode="clipping" title="Label" id="gtb-64-TKV">
+                                    <font key="font" metaFont="system"/>
+                                    <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
+                                    <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
+                                </textFieldCell>
+                            </textField>
                         </subviews>
                     </view>
                     <connections>
                         <outlet property="imageView" destination="Dde-gz-xaO" id="Pvx-pD-GQn"/>
+                        <outlet property="predictImageView" destination="laA-HG-ufr" id="Ocy-H6-zxn"/>
+                        <outlet property="predictLabel" destination="KOU-gh-wkk" id="dh2-ta-ICf"/>
                         <outlet property="statusLabel" destination="nPa-4Y-B1r" id="SeY-vD-yAb"/>
                     </connections>
                 </viewController>

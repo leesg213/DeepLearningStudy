@@ -15,8 +15,8 @@
 {
     MTKView *_view;
     CatClassifier *_classifier;
-    IBOutlet NSImageView* imageView;
-    IBOutlet NSTextField* statusLabel;
+    IBOutlet NSImageView* imageView, *predictImageView;
+    IBOutlet NSTextField* statusLabel, *predictLabel;
 }
 
 - (void)viewDidLoad
@@ -40,8 +40,63 @@
     
     // Set image scaling to fit the imageView frame
     imageView.imageScaling = NSImageScaleProportionallyUpOrDown;
+    predictImageView.imageScaling = NSImageScaleProportionallyUpOrDown;
 }
 
+-(IBAction)predict:(id)sender
+{
+    // Create open panel for file selection
+    NSOpenPanel *openPanel = [NSOpenPanel openPanel];
+    
+    // Configure the panel
+    openPanel.title = @"Choose an image to classify";
+    openPanel.message = @"Select a JPG image file";
+    openPanel.canChooseFiles = YES;
+    openPanel.canChooseDirectories = NO;
+    openPanel.allowsMultipleSelection = NO;
+    
+    // Set allowed file types
+    openPanel.allowedFileTypes = @[@"jpg", @"jpeg", @"JPG", @"JPEG"];
+    
+    // Show the panel
+    [openPanel beginSheetModalForWindow:self.view.window completionHandler:^(NSModalResponse result) {
+        if (result == NSModalResponseOK) {
+            // User selected a file
+            NSURL *selectedURL = openPanel.URL;
+            NSString *imagePath = selectedURL.path;
+            
+            NSLog(@"Selected image: %@", imagePath);
+            
+            // Load and display the selected image
+            NSImage *image = [[NSImage alloc] initWithContentsOfFile:imagePath];
+            if (image) {
+                // Resize image to match training size
+                NSImage *resizedImage = [self resizeImage:image toWidth:TRAINING_IMAGE_WIDTH height:TRAINING_IMAGE_WIDTH];
+                
+                // Display in predict image view
+                self->predictImageView.image = resizedImage;
+                
+                // Extract RGB data
+                std::vector<uint8_t> imageData;
+                if ([self extractRGBDataFromImage:resizedImage :imageData]) {
+                    // TODO: Call classifier prediction
+                    float isCat = self->_classifier->Predict(imageData);
+                    [self->predictLabel setStringValue:[NSString stringWithFormat:@"P : %f", isCat]];
+                    
+                    //[self->predictLabel setStringValue:@"Prediction ready"];
+                } else {
+                    [self->predictLabel setStringValue:@"Failed to process image"];
+                }
+            } else {
+                NSLog(@"Failed to load image from: %@", imagePath);
+                [self->predictLabel setStringValue:@"Failed to load image"];
+            }
+        } else {
+            // User cancelled
+            NSLog(@"Image selection cancelled");
+        }
+    }];
+}
 - (IBAction)startTraining:(id)sender
 {
     NSLog(@"Start Training button clicked!");
@@ -51,11 +106,19 @@
     [self.trainButton setTitle:@"Training..."];
     
     // Collect all image paths first
-    NSMutableArray *imagePaths = [NSMutableArray array];
+    NSMutableArray *imagePaths_cat = [NSMutableArray array];
+    NSMutableArray *imagePaths_dog = [NSMutableArray array];
+
+    int max_training_data = 6000;
     
     [self walkFilesAtPath:@"/Users/sugulee/Documents/Datasets/CatImages" withFileHandler:^(NSString *filePath, BOOL isDirectory) {
         
         if(isDirectory)
+        {
+            return;
+        }
+        
+        if(imagePaths_cat.count > max_training_data)
         {
             return;
         }
@@ -70,10 +133,36 @@
             return;
         }
         
-        [imagePaths addObject:filePath];
+        
+        [imagePaths_cat addObject:filePath];
     }];
     
-    NSLog(@"Found %lu images to process", (unsigned long)imagePaths.count);
+    [self walkFilesAtPath:@"/Users/sugulee/Documents/Datasets/cropped/train" withFileHandler:^(NSString *filePath, BOOL isDirectory) {
+        
+        if(isDirectory)
+        {
+            return;
+        }
+        
+        if(imagePaths_dog.count > max_training_data)
+        {
+            return;
+        }
+        
+        NSString *extension = [[filePath pathExtension] lowercaseString];
+        bool isImage = [extension isEqualToString:@"jpg"] ||
+        [extension isEqualToString:@"jpeg"] ||
+        [extension isEqualToString:@"png"];
+        
+        if(!isImage)
+        {
+            return;
+        }
+        
+        [imagePaths_dog addObject:filePath];
+    }];
+    
+    NSLog(@"Found %lu images to process", (unsigned long)imagePaths_cat.count);
     
     // Process images one by one with a delay to visualize
     __block NSInteger currentIndex = 0;
@@ -84,17 +173,20 @@
     trainingData.resize(TRAINING_IMAGE_WIDTH*TRAINING_IMAGE_WIDTH*3);
     
     processNextImage = ^{
-        if (currentIndex < imagePaths.count && currentIndex<1000) {
-            NSString *imagePath = imagePaths[currentIndex];
+        if (currentIndex < (imagePaths_cat.count+imagePaths_dog.count) /* && currentIndex<1000 */ ) {
+            
+            bool isCat = currentIndex < imagePaths_cat.count;
+            
+            NSString *imagePath = isCat ? imagePaths_cat[currentIndex] : imagePaths_dog[currentIndex-imagePaths_cat.count];
             
             // Load and display the image
             [self loadImageFromPath:imagePath];
-            [statusLabel setStringValue:[NSString stringWithFormat:@"%d/%d", currentIndex, imagePaths.count]];
+            [statusLabel setStringValue:[NSString stringWithFormat:@"%d/%d", currentIndex, (imagePaths_cat.count+imagePaths_dog.count)]];
             
             [self extractRGBDataFromImage:imageView.image :trainingData];
             
             allTrainingData.push_back(trainingData);
-            isCatData.push_back(1);
+            isCatData.push_back(isCat ? 1 : 0);
             
             //_classifier->Train(trainingData, true);
             
@@ -105,7 +197,7 @@
                           dispatch_get_main_queue(), processNextImage);
         } else {
             
-            _classifier->Train(allTrainingData, isCatData, 1000, 0.009);
+            _classifier->Train(allTrainingData, isCatData, 1000, 0.002);
             
             // All images processed
             NSLog(@"Training complete!");

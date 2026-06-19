@@ -24,6 +24,8 @@ public:
                int numIterations,
                float learningRate);
     
+    float Predict(std::vector<uint8_t> const& testData);
+    
 private:
     id<MTLDevice> _device;
     id<MTLCommandQueue> _cmdQueue;

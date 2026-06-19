@@ -87,6 +87,27 @@ void CatClassifier::CalcGrad(std::vector<std::vector<uint8_t>> const& trainData,
     }
     outDb = sum / numImages;
 }
+float sigmod(float inValue)
+{
+    float epsilon = 0.000001f;
+    return simd_clamp((1.0f / (1 + exp(-inValue))),epsilon,1-epsilon);
+}
+float CatClassifier::Predict(std::vector<uint8_t> const& testData)
+{
+    float* weight_values = (float*)_weights.contents;
+    
+    float sum = 0;
+    for(int i = 0;i<testData.size();++i)
+    {
+        sum += weight_values[i+1] * testData[i]/255.0f;
+    }
+    sum += weight_values[0];
+    
+    NSLog(@"Sum : %f", sum);
+    
+    return sigmod(sum);
+}
+
 void CatClassifier::Train(std::vector<std::vector<uint8_t>> const& trainData,
                           std::vector<uint8_t> const& isCatData,
                           int numIterations,
@@ -106,7 +127,11 @@ void CatClassifier::Train(std::vector<std::vector<uint8_t>> const& trainData,
     id<MTLBuffer> outGrads = [_device newBufferWithLength:(imageDataLength+1)*sizeof(float) options:MTLResourceStorageModeShared];
 
     id<MTLBuffer> trainingDataBuffer = [_device newBufferWithLength:numImages*imageDataLength options:(MTLResourceCPUCacheModeDefaultCache | MTLResourceStorageModeShared)];
-    memcpy(trainingDataBuffer.contents, &trainData[0],numImages*imageDataLength);
+    for(int i = 0;i<trainData.size();++i)
+    {
+        uint8_t* target = (uint8_t*)trainingDataBuffer.contents;
+        memcpy(target+imageDataLength*i, &trainData[i],imageDataLength);
+    }
     
     id<MTLBuffer> isCatDataBuffer = [_device newBufferWithLength:numImages options:MTLResourceStorageModeShared];
     memcpy(isCatDataBuffer.contents, &isCatData[0], numImages);
@@ -132,7 +157,6 @@ void CatClassifier::Train(std::vector<std::vector<uint8_t>> const& trainData,
                 NSLog(@"Metal GPU capture started");
             } else {
                 NSLog(@"Failed to start Metal GPU capture: %@", captureError.localizedDescription);
-                
             }
         }
         
@@ -150,6 +174,8 @@ void CatClassifier::Train(std::vector<std::vector<uint8_t>> const& trainData,
         [encoder setBuffer:outCosts offset:0 atIndex:4];
         [encoder setBuffer:outActivations offset:0 atIndex:5];
         [encoder dispatchThreads:MTLSizeMake(numImages, 1, 1) threadsPerThreadgroup:MTLSizeMake(32, 1, 1)];
+        
+        [encoder memoryBarrierWithScope:MTLBarrierScopeBuffers];
         
         [encoder setComputePipelineState:_pipelineComputeGrads];
         [encoder setBuffer:trainingDataBuffer offset:0 atIndex: 0];
@@ -172,11 +198,10 @@ void CatClassifier::Train(std::vector<std::vector<uint8_t>> const& trainData,
         float* gradValues = (float*)outGrads.contents;
         // Update weights
         float* weight_values = (float*)_weights.contents;
-        for(int i = 0;i<dW.size();++i)
+        for(int i = 0;i<imageDataLength+1;++i)
         {
-            weight_values[i+1] = weight_values[i+1] - learningRate * gradValues[i+1];
+            weight_values[i] = weight_values[i] - learningRate * gradValues[i];
         }
-        weight_values[0] = weight_values[0] - learningRate*gradValues[0];
         
         if(captureManager)
         {
@@ -185,4 +210,17 @@ void CatClassifier::Train(std::vector<std::vector<uint8_t>> const& trainData,
             NSLog(@"Metal GPU capture stopped");
         }
     }
+    
+    std::vector<float> finalWeights;
+    
+    {
+        float* weight_values = (float*)_weights.contents;
+        finalWeights.resize(imageDataLength+1);
+        for(int i = 0;i<imageDataLength+1;++i)
+        {
+            finalWeights[i] = weight_values[i];
+        }
+    }
+    
+    NSLog(@"Train complete");
 }
