@@ -7,6 +7,7 @@
 
 #import "GameViewController.h"
 #import "CatClassifier.hpp"
+#include <vector>
 
 #define TRAINING_IMAGE_WIDTH 64
 
@@ -35,6 +36,7 @@
     
     // Initialize classifier
     _classifier = new CatClassifier();
+    _classifier->Init(_view.device);
     
     // Set image scaling to fit the imageView frame
     imageView.imageScaling = NSImageScaleProportionallyUpOrDown;
@@ -76,14 +78,25 @@
     // Process images one by one with a delay to visualize
     __block NSInteger currentIndex = 0;
     __block dispatch_block_t processNextImage;
+    __block std::vector<uint8_t> trainingData;
+    __block std::vector<std::vector<uint8_t>> allTrainingData;
+    __block std::vector<uint8_t> isCatData;
+    trainingData.resize(TRAINING_IMAGE_WIDTH*TRAINING_IMAGE_WIDTH*3);
     
     processNextImage = ^{
-        if (currentIndex < imagePaths.count) {
+        if (currentIndex < imagePaths.count && currentIndex<100) {
             NSString *imagePath = imagePaths[currentIndex];
             
             // Load and display the image
             [self loadImageFromPath:imagePath];
             [statusLabel setStringValue:[NSString stringWithFormat:@"%d/%d", currentIndex, imagePaths.count]];
+            
+            [self extractRGBDataFromImage:imageView.image :trainingData];
+            
+            allTrainingData.push_back(trainingData);
+            isCatData.push_back(1);
+            
+            //_classifier->Train(trainingData, true);
             
             currentIndex++;
             
@@ -91,6 +104,9 @@
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.000 * NSEC_PER_SEC)),
                           dispatch_get_main_queue(), processNextImage);
         } else {
+            
+            _classifier->Train(allTrainingData, isCatData, 1000, 0.009);
+            
             // All images processed
             NSLog(@"Training complete!");
             self.trainButton.enabled = YES;
@@ -225,6 +241,135 @@
     }
     
     NSLog(@"Finished walking files at path: %@", rootPath);
+}
+
+- (unsigned char *)extractBitmapDataFromImage:(NSImage *)image
+{
+    if (!image) {
+        NSLog(@"Error: Image is nil");
+        return NULL;
+    }
+    
+    NSSize imageSize = image.size;
+    NSInteger width = (NSInteger)imageSize.width;
+    NSInteger height = (NSInteger)imageSize.height;
+    
+    // Create bitmap representation
+    NSBitmapImageRep *bitmapRep = [[NSBitmapImageRep alloc]
+                                   initWithBitmapDataPlanes:NULL
+                                   pixelsWide:width
+                                   pixelsHigh:height
+                                   bitsPerSample:8
+                                   samplesPerPixel:4  // RGBA
+                                   hasAlpha:YES
+                                   isPlanar:NO
+                                   colorSpaceName:NSCalibratedRGBColorSpace
+                                   bytesPerRow:width * 4
+                                   bitsPerPixel:32];
+    
+    if (!bitmapRep) {
+        NSLog(@"Error: Failed to create bitmap representation");
+        return NULL;
+    }
+    
+    // Draw image into bitmap context
+    [NSGraphicsContext saveGraphicsState];
+    [NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithBitmapImageRep:bitmapRep]];
+    [image drawInRect:NSMakeRect(0, 0, width, height)
+             fromRect:NSZeroRect
+            operation:NSCompositingOperationSourceOver
+             fraction:1.0];
+    [NSGraphicsContext restoreGraphicsState];
+    
+    // Get pointer to bitmap data
+    unsigned char *bitmapData = [bitmapRep bitmapData];
+    
+    if (!bitmapData) {
+        NSLog(@"Error: Failed to get bitmap data");
+        return NULL;
+    }
+    
+    // Calculate total size (width * height * 4 bytes per pixel for RGBA)
+    NSInteger dataSize = width * height * 4;
+    
+    // Allocate memory and copy data (caller is responsible for freeing this memory)
+    unsigned char *copiedData = (unsigned char *)malloc(dataSize);
+    if (copiedData) {
+        memcpy(copiedData, bitmapData, dataSize);
+        NSLog(@"Extracted bitmap data: %ldx%ld, %ld bytes", width, height, dataSize);
+    } else {
+        NSLog(@"Error: Failed to allocate memory for bitmap data");
+        return NULL;
+    }
+    
+    return copiedData;
+}
+
+- (bool)extractRGBDataFromImage:(NSImage *)image :(std::vector<uint8_t>&)outVector
+{
+    if (!image) {
+        NSLog(@"Error: Image is nil");
+        return false;
+    }
+    
+    NSSize imageSize = image.size;
+    NSInteger width = (NSInteger)imageSize.width;
+    NSInteger height = (NSInteger)imageSize.height;
+    
+    // Create bitmap representation with RGBA (4 channels)
+    NSBitmapImageRep *bitmapRep = [[NSBitmapImageRep alloc]
+                                   initWithBitmapDataPlanes:NULL
+                                   pixelsWide:width
+                                   pixelsHigh:height
+                                   bitsPerSample:8
+                                   samplesPerPixel:4  // RGBA
+                                   hasAlpha:YES
+                                   isPlanar:NO
+                                   colorSpaceName:NSCalibratedRGBColorSpace
+                                   bytesPerRow:width * 4
+                                   bitsPerPixel:32];
+    
+    if (!bitmapRep) {
+        NSLog(@"Error: Failed to create bitmap representation");
+        return false;
+    }
+    
+    // Draw image into bitmap context
+    [NSGraphicsContext saveGraphicsState];
+    [NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithBitmapImageRep:bitmapRep]];
+    [image drawInRect:NSMakeRect(0, 0, width, height)
+             fromRect:NSZeroRect
+            operation:NSCompositingOperationSourceOver
+             fraction:1.0];
+    [NSGraphicsContext restoreGraphicsState];
+    
+    // Get pointer to bitmap data (RGBA format)
+    unsigned char *bitmapData = [bitmapRep bitmapData];
+    
+    if (!bitmapData) {
+        NSLog(@"Error: Failed to get bitmap data");
+        return false;
+    }
+    
+    // Calculate RGB size (width * height * 3 bytes per pixel)
+    NSInteger rgbSize = width * height * 3;
+    NSInteger rgbaSize = width * height * 4;
+    
+    // Resize output vector
+    outVector.resize(rgbSize);
+    
+    // Convert RGBA to RGB by stripping alpha channel
+    NSInteger rgbIndex = 0;
+    for (NSInteger i = 0; i < rgbaSize; i += 4) {
+        outVector[rgbIndex++] = bitmapData[i];     // R
+        outVector[rgbIndex++] = bitmapData[i + 1]; // G
+        outVector[rgbIndex++] = bitmapData[i + 2]; // B
+        // Skip alpha channel (i + 3)
+    }
+    
+    NSLog(@"Extracted RGB data: %ldx%ld, %ld bytes", width, height, rgbSize);
+    
+    return true;
 }
 
 - (void)dealloc

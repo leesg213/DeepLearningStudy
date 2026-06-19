@@ -9,45 +9,37 @@
 
 #include <metal_stdlib>
 #include <simd/simd.h>
+#include "ShaderTypes.h"
+#include <metal_math>
 
-// Including header shared between this Metal shader code and Swift/C code executing Metal API commands
-#import "ShaderTypes.h"
-
-using namespace metal;
-
-typedef struct
+float sigmod(float inValue)
 {
-    float3 position [[attribute(VertexAttributePosition)]];
-    float2 texCoord [[attribute(VertexAttributeTexcoord)]];
-} Vertex;
-
-typedef struct
-{
-    float4 position [[position]];
-    float2 texCoord;
-} ColorInOut;
-
-vertex ColorInOut vertexShader(Vertex in [[stage_in]],
-                               constant Uniforms & uniforms [[ buffer(BufferIndexUniforms) ]])
-{
-    ColorInOut out;
-
-    float4 position = float4(in.position, 1.0);
-    out.position = uniforms.projectionMatrix * uniforms.modelViewMatrix * position;
-    out.texCoord = in.texCoord;
-
-    return out;
+    return 1.0f / (1 + metal::exp(-inValue));
 }
-
-fragment float4 fragmentShader(ColorInOut in [[stage_in]],
-                               constant Uniforms & uniforms [[ buffer(BufferIndexUniforms) ]],
-                               texture2d<half> colorMap     [[ texture(TextureIndexColor) ]])
+kernel void computeCost(device uint8_t* training_data [[buffer(0)]],
+                        device uint8_t* isCat_data [[buffer(1)]],
+                        device float* weights [[buffer(2)]],
+                        constant Uniforms& uniforms [[buffer(3)]],
+                        device float* outCosts [[buffer(4)]],
+                        uint thread_id [[thread_position_in_grid]])
 {
-    constexpr sampler colorSampler(mip_filter::linear,
-                                   mag_filter::linear,
-                                   min_filter::linear);
-
-    half4 colorSample   = colorMap.sample(colorSampler, in.texCoord.xy);
-
-    return float4(colorSample);
+    device uint8_t* current_training_data = &training_data[uniforms.imageDataLength*thread_id];
+    uint8_t isCat = isCat_data[thread_id];
+    
+    // Calc activation
+    float A = 0;
+    for(uint32_t i = 0;i<uniforms.imageDataLength;++i)
+    {
+        A += current_training_data[i]/255.0f * weights[i+1];
+    }
+    A += weights[0];
+    A = sigmod(A);
+    
+    // Calc cost
+    outCosts[thread_id] = isCat*metal::log(A)+(1-isCat)*metal::log(1-A);
+}
+kernel void network(device uint8_t& training_data [[buffer(0)]],
+                    device float& weights [[buffer(1)]])
+{
+    
 }
