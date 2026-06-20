@@ -78,7 +78,7 @@ void CatClassifier::CalcGrad(std::vector<std::vector<uint8_t>> const& trainData,
     }
     outDb = sum / numImages;
 }
-float sigmod(float inValue)
+float sigmoid(float inValue)
 {
     float epsilon = 0.000001f;
     return simd_clamp((1.0f / (1 + exp(-inValue))),epsilon,1-epsilon);
@@ -100,7 +100,7 @@ void CatClassifier::Predict(std::vector<uint8_t> const& testData,
         }
         sum += weight_values[0];
         
-        float predict = sigmod(sum);
+        float predict = sigmoid(sum);
         
         bool isCat = predict > 0.5f;
         
