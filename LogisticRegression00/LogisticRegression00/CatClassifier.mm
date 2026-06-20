@@ -38,19 +38,10 @@ float CatClassifier::CalcCost(id<MTLBuffer> allCosts, size_t numImages)
     for(size_t i = 0;i<numImages;++i)
     {
         float costValue = allCostValues[i];
-        if(isnan(costValue))
-        {
-            NSLog(@"here");
-        }
         sum += allCostValues[i];
     }
     
     float cost = -sum/numImages;
-    
-    if(isnan(cost))
-    {
-        NSLog(@"Here");
-    }
     return cost;
 }
 void CatClassifier::CalcGrad(std::vector<std::vector<uint8_t>> const& trainData, id<MTLBuffer> allActivations, std::vector<uint8_t> const& isCatData, std::vector<float>& outDw, float& outDb)
@@ -92,30 +83,45 @@ float sigmod(float inValue)
     float epsilon = 0.000001f;
     return simd_clamp((1.0f / (1 + exp(-inValue))),epsilon,1-epsilon);
 }
-float CatClassifier::Predict(std::vector<uint8_t> const& testData)
+void CatClassifier::Predict(std::vector<uint8_t> const& testData,
+              std::vector<uint8_t> const& isCatData,
+              int numImages,
+              int imageWidth)
 {
+    int num_passed = 0;
     float* weight_values = (float*)_weights.contents;
-    
-    float sum = 0;
-    for(int i = 0;i<testData.size();++i)
+
+    for(int i = 0;i<numImages;++i)
     {
-        sum += weight_values[i+1] * testData[i]/255.0f;
+        float sum = 0;
+        for(int j = 0;j<imageWidth*imageWidth*3;++j)
+        {
+            sum += weight_values[j+1] * (testData[i*imageWidth*imageWidth*3+j]/255.0f);
+        }
+        sum += weight_values[0];
+        
+        float predict = sigmod(sum);
+        
+        bool isCat = predict > 0.5f;
+        
+        if(isCat == isCatData[i])
+        {
+            num_passed++;
+        }
     }
-    sum += weight_values[0];
-    
-    NSLog(@"Sum : %f", sum);
-    
-    return sigmod(sum);
+        
+    NSLog(@"%d/%d passed.", num_passed, numImages);
 }
 
-void CatClassifier::Train(std::vector<std::vector<uint8_t>> const& trainData,
+void CatClassifier::Train(std::vector<uint8_t> const& trainData,
                           std::vector<uint8_t> const& isCatData,
+                          int numImages,
+                          int imageWidth,
                           int numIterations,
                           float learningRate)
 {
     
-    size_t numImages = trainData.size();
-    size_t imageDataLength = trainData[0].size();
+    size_t imageDataLength = imageWidth * imageWidth * 3;
     
     id<MTLBuffer> uniforms = [_device newBufferWithLength:sizeof(Uniforms) options:MTLResourceStorageModeShared];
     Uniforms* uniforms_data = (Uniforms*)uniforms.contents;
@@ -126,12 +132,8 @@ void CatClassifier::Train(std::vector<std::vector<uint8_t>> const& trainData,
     id<MTLBuffer> outActivations = [_device newBufferWithLength:numImages*sizeof(float) options:MTLResourceStorageModeShared];
     id<MTLBuffer> outGrads = [_device newBufferWithLength:(imageDataLength+1)*sizeof(float) options:MTLResourceStorageModeShared];
 
-    id<MTLBuffer> trainingDataBuffer = [_device newBufferWithLength:numImages*imageDataLength options:(MTLResourceCPUCacheModeDefaultCache | MTLResourceStorageModeShared)];
-    for(int i = 0;i<trainData.size();++i)
-    {
-        uint8_t* target = (uint8_t*)trainingDataBuffer.contents;
-        memcpy(target+imageDataLength*i, &trainData[i],imageDataLength);
-    }
+    id<MTLBuffer> trainingDataBuffer = [_device newBufferWithLength:trainData.size() options:(MTLResourceCPUCacheModeDefaultCache | MTLResourceStorageModeShared)];
+    memcpy(trainingDataBuffer.contents, trainData.data(), trainData.size());
     
     id<MTLBuffer> isCatDataBuffer = [_device newBufferWithLength:numImages options:MTLResourceStorageModeShared];
     memcpy(isCatDataBuffer.contents, &isCatData[0], numImages);
@@ -145,7 +147,7 @@ void CatClassifier::Train(std::vector<std::vector<uint8_t>> const& trainData,
         
         // Start Metal GPU capture
         MTLCaptureManager *captureManager = nil;
-        if(captureTrace && iter == 6)
+        if(captureTrace && iter == 0)
         {
             captureManager = [MTLCaptureManager sharedCaptureManager];
             MTLCaptureDescriptor *captureDescriptor = [[MTLCaptureDescriptor alloc] init];
@@ -190,9 +192,6 @@ void CatClassifier::Train(std::vector<std::vector<uint8_t>> const& trainData,
         [cmdBuffer waitUntilCompleted];
         
         float cost = CalcCost(outCosts, numImages);
-        std::vector<float> dW;
-        float dB;
-        //CalcGrad(trainData, outActivations, isCatData, dW, dB);
         NSLog(@"Cost : %f", cost);
         
         float* gradValues = (float*)outGrads.contents;

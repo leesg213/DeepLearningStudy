@@ -8,6 +8,7 @@
 #import "GameViewController.h"
 #import "CatClassifier.hpp"
 #include <vector>
+#include <H5Cpp.h>
 
 #define TRAINING_IMAGE_WIDTH 64
 
@@ -42,9 +43,46 @@
     imageView.imageScaling = NSImageScaleProportionallyUpOrDown;
     predictImageView.imageScaling = NSImageScaleProportionallyUpOrDown;
 }
+-(void)loadDataSetFromH5
+{
+    NSString* dataSetPath_train = @"/Users/sugulee/Documents/Files/home/jovyan/work/release/W2A2/datasets/train_catvnoncat.h5";
+    NSString* dataSetPath_test = @"/Users/sugulee/Documents/Files/home/jovyan/work/release/W2A2/datasets/test_catvnoncat.h5";
 
+    H5::H5File train_file(dataSetPath_train.UTF8String, H5F_ACC_RDONLY);
+    H5::H5File test_file(dataSetPath_test.UTF8String, H5F_ACC_RDONLY);
+
+    H5::DataSet ds_train_set_x = train_file.openDataSet("train_set_x"); // 209,64,64,3
+    H5::DataSet ds_train_set_y = train_file.openDataSet("train_set_y"); // 209
+
+    H5::DataSet ds_test_set_x = test_file.openDataSet("test_set_x");
+    H5::DataSet ds_test_set_y = test_file.openDataSet("test_set_y");
+    
+    H5::DataSpace dataspace = ds_train_set_x.getSpace();
+    
+    hsize_t dims[4];
+    dataspace.getSimpleExtentDims(dims, nullptr);
+
+    int numImages = dims[0];
+    int height    = dims[1];
+    int width     = dims[2];
+    int channels  = dims[3];
+    
+    std::vector<uint8_t> train_set_x(numImages * width * height * channels);
+    ds_train_set_x.read(train_set_x.data(), H5::PredType::NATIVE_UINT8);
+    std::vector<uint8_t> train_set_y(numImages);
+    ds_train_set_y.read(train_set_y.data(), H5::PredType::NATIVE_UINT8);
+
+    std::vector<uint8_t> test_set_x(numImages * width * height * channels);
+    ds_test_set_x.read(test_set_x.data(), H5::PredType::NATIVE_UINT8);
+    std::vector<uint8_t> test_set_y(numImages);
+    ds_test_set_y.read(test_set_y.data(), H5::PredType::NATIVE_UINT8);
+
+  
+    NSLog(@"[DataSet loaded]");
+}
 -(IBAction)predict:(id)sender
 {
+#if false
     // Create open panel for file selection
     NSOpenPanel *openPanel = [NSOpenPanel openPanel];
     
@@ -96,6 +134,7 @@
             NSLog(@"Image selection cancelled");
         }
     }];
+#endif
 }
 - (IBAction)startTraining:(id)sender
 {
@@ -105,64 +144,41 @@
     self.trainButton.enabled = NO;
     [self.trainButton setTitle:@"Training..."];
     
-    // Collect all image paths first
-    NSMutableArray *imagePaths_cat = [NSMutableArray array];
-    NSMutableArray *imagePaths_dog = [NSMutableArray array];
+    NSString* dataSetPath_train = @"/Users/sugulee/Documents/Files/home/jovyan/work/release/W2A2/datasets/train_catvnoncat.h5";
+    NSString* dataSetPath_test = @"/Users/sugulee/Documents/Files/home/jovyan/work/release/W2A2/datasets/test_catvnoncat.h5";
 
-    int max_training_data = 6000;
+    H5::H5File train_file(dataSetPath_train.UTF8String, H5F_ACC_RDONLY);
+    H5::H5File test_file(dataSetPath_test.UTF8String, H5F_ACC_RDONLY);
+
+    H5::DataSet ds_train_set_x = train_file.openDataSet("train_set_x"); // 209,64,64,3
+    H5::DataSet ds_train_set_y = train_file.openDataSet("train_set_y"); // 209
+
+    H5::DataSet ds_test_set_x = test_file.openDataSet("test_set_x");
+    H5::DataSet ds_test_set_y = test_file.openDataSet("test_set_y");
     
-    [self walkFilesAtPath:@"/Users/sugulee/Documents/Datasets/CatImages" withFileHandler:^(NSString *filePath, BOOL isDirectory) {
-        
-        if(isDirectory)
-        {
-            return;
-        }
-        
-        if(imagePaths_cat.count > max_training_data)
-        {
-            return;
-        }
-        
-        NSString *extension = [[filePath pathExtension] lowercaseString];
-        bool isImage = [extension isEqualToString:@"jpg"] ||
-        [extension isEqualToString:@"jpeg"] ||
-        [extension isEqualToString:@"png"];
-        
-        if(!isImage)
-        {
-            return;
-        }
-        
-        
-        [imagePaths_cat addObject:filePath];
-    }];
+    H5::DataSpace dataspace_train = ds_train_set_x.getSpace();
+    H5::DataSpace dataspace_test = ds_test_set_x.getSpace();
+
+    hsize_t dims[4];
+    dataspace_train.getSimpleExtentDims(dims, nullptr);
+
+    int numImages_train = dims[0];
+    int height    = dims[1];
+    int width     = dims[2];
+    int channels  = dims[3];
+
+    dataspace_test.getSimpleExtentDims(dims, nullptr);
+    int numImages_test = dims[0];
     
-    [self walkFilesAtPath:@"/Users/sugulee/Documents/Datasets/cropped/train" withFileHandler:^(NSString *filePath, BOOL isDirectory) {
-        
-        if(isDirectory)
-        {
-            return;
-        }
-        
-        if(imagePaths_dog.count > max_training_data)
-        {
-            return;
-        }
-        
-        NSString *extension = [[filePath pathExtension] lowercaseString];
-        bool isImage = [extension isEqualToString:@"jpg"] ||
-        [extension isEqualToString:@"jpeg"] ||
-        [extension isEqualToString:@"png"];
-        
-        if(!isImage)
-        {
-            return;
-        }
-        
-        [imagePaths_dog addObject:filePath];
-    }];
-    
-    NSLog(@"Found %lu images to process", (unsigned long)imagePaths_cat.count);
+    std::vector<uint8_t> train_set_x(numImages_train * width * height * channels);
+    ds_train_set_x.read(train_set_x.data(), H5::PredType::NATIVE_UINT8);
+    std::vector<uint8_t> train_set_y(numImages_train);
+    ds_train_set_y.read(train_set_y.data(), H5::PredType::NATIVE_UINT8);
+
+    std::vector<uint8_t> test_set_x(numImages_test * width * height * channels);
+    ds_test_set_x.read(test_set_x.data(), H5::PredType::NATIVE_UINT8);
+    std::vector<uint8_t> test_set_y(numImages_test);
+    ds_test_set_y.read(test_set_y.data(), H5::PredType::NATIVE_UINT8);
     
     // Process images one by one with a delay to visualize
     __block NSInteger currentIndex = 0;
@@ -173,32 +189,59 @@
     trainingData.resize(TRAINING_IMAGE_WIDTH*TRAINING_IMAGE_WIDTH*3);
     
     processNextImage = ^{
-        if (currentIndex < (imagePaths_cat.count+imagePaths_dog.count) /* && currentIndex<1000 */ ) {
+        if (currentIndex < numImages_train ) {
+                        
+            NSImage* image = [self createImageFromRGBData:train_set_x offset:(currentIndex*(width*height*channels)) width:width height:height];
             
-            bool isCat = currentIndex < imagePaths_cat.count;
+            imageView.image = image;
             
-            NSString *imagePath = isCat ? imagePaths_cat[currentIndex] : imagePaths_dog[currentIndex-imagePaths_cat.count];
+            [statusLabel setStringValue:[NSString stringWithFormat:@"%d/%d", currentIndex, numImages_train]];
             
-            // Load and display the image
-            [self loadImageFromPath:imagePath];
-            [statusLabel setStringValue:[NSString stringWithFormat:@"%d/%d", currentIndex, (imagePaths_cat.count+imagePaths_dog.count)]];
             
-            [self extractRGBDataFromImage:imageView.image :trainingData];
-            
-            allTrainingData.push_back(trainingData);
-            isCatData.push_back(isCat ? 1 : 0);
+           // allTrainingData.push_back(trainingData);
+            //isCatData.push_back(isCat ? 1 : 0);
             
             //_classifier->Train(trainingData, true);
             
             currentIndex++;
             
             // Schedule next image (adjust delay as needed - 0.1 seconds here)
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.000 * NSEC_PER_SEC)),
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.001 * NSEC_PER_SEC)),
                           dispatch_get_main_queue(), processNextImage);
         } else {
+#if false
+            std::vector<std::vector<uint8_t>> testTrainData;
             
-            _classifier->Train(allTrainingData, isCatData, 1000, 0.002);
+            {
+                std::vector<uint8_t> testImage;
+                testImage.resize(2);
+                testImage[0] = 1; testImage[1] = 3;
+                testTrainData.push_back(testImage);
+            }
+            {
+                std::vector<uint8_t> testImage;
+                testImage.resize(2);
+                testImage[0] = -2; testImage[1] = 0.5;
+                testTrainData.push_back(testImage);
+            }
+            {
+                std::vector<uint8_t> testImage;
+                testImage.resize(2);
+                testImage[0] = -1; testImage[1] = -3.2;
+                testTrainData.push_back(testImage);
+            }
             
+            std::vector<uint8_t> testIsCatData;
+            testIsCatData.resize(3);
+            testIsCatData[0] = 1; testIsCatData[1] =1; testIsCatData[2] = 0;
+            
+            _classifier->Train(testTrainData, testIsCatData, 100, 0.002);
+#endif
+            _classifier->Train(train_set_x, train_set_y, numImages_train, width, 2000, 0.005);
+            
+            _classifier->Predict(train_set_x, train_set_y, numImages_train, width);
+            _classifier->Predict(test_set_x, test_set_y, numImages_test, width);
+
             // All images processed
             NSLog(@"Training complete!");
             self.trainButton.enabled = YES;
@@ -462,6 +505,71 @@
     NSLog(@"Extracted RGB data: %ldx%ld, %ld bytes", width, height, rgbSize);
     
     return true;
+}
+
+- (NSImage *)createImageFromRGBData:(const std::vector<uint8_t>&)rgbData
+                            offset:(NSInteger)offset
+                              width:(NSInteger)width
+                             height:(NSInteger)height
+{
+    if (rgbData.empty()) {
+        NSLog(@"Error: RGB data is empty");
+        return nil;
+    }
+    
+#if false
+    NSInteger expectedSize = width * height * 3;
+    if (rgbData.size() != expectedSize) {
+        NSLog(@"Error: RGB data size mismatch. Expected %ld bytes, got %zu bytes",
+              expectedSize, rgbData.size());
+        return nil;
+    }
+#endif
+    
+    // Create bitmap representation with RGBA (we'll convert RGB to RGBA)
+    NSBitmapImageRep *bitmapRep = [[NSBitmapImageRep alloc]
+                                   initWithBitmapDataPlanes:NULL
+                                   pixelsWide:width
+                                   pixelsHigh:height
+                                   bitsPerSample:8
+                                   samplesPerPixel:4  // RGBA
+                                   hasAlpha:YES
+                                   isPlanar:NO
+                                   colorSpaceName:NSCalibratedRGBColorSpace
+                                   bytesPerRow:width * 4
+                                   bitsPerPixel:32];
+    
+    if (!bitmapRep) {
+        NSLog(@"Error: Failed to create bitmap representation");
+        return nil;
+    }
+    
+    // Get pointer to bitmap data
+    unsigned char *bitmapData = [bitmapRep bitmapData];
+    
+    if (!bitmapData) {
+        NSLog(@"Error: Failed to get bitmap data pointer");
+        return nil;
+    }
+    
+    // Convert RGB to RGBA by adding alpha channel
+    NSInteger rgbIndex = 0;
+    NSInteger rgbaIndex = 0;
+    
+    for (NSInteger i = 0; i < width * height; i++) {
+        bitmapData[rgbaIndex++] = rgbData[offset+rgbIndex++]; // R
+        bitmapData[rgbaIndex++] = rgbData[offset+rgbIndex++]; // G
+        bitmapData[rgbaIndex++] = rgbData[offset+rgbIndex++]; // B
+        bitmapData[rgbaIndex++] = 255;                  // A (fully opaque)
+    }
+    
+    // Create NSImage from bitmap representation
+    NSImage *image = [[NSImage alloc] initWithSize:NSMakeSize(width, height)];
+    [image addRepresentation:bitmapRep];
+    
+    NSLog(@"Created image from RGB data: %ldx%ld", width, height);
+    
+    return image;
 }
 
 - (void)dealloc

@@ -28,13 +28,20 @@ kernel void computeCost(device uint8_t* training_data [[buffer(0)]],
     device uint8_t* current_training_data = &training_data[uniforms.imageDataLength*thread_id];
     uint8_t isCat = isCat_data[thread_id];
     
+   // float X[3][2] = {{ 1, 3.0f }, { -2, 0.5f }, { -1, -3.2f }};
+    
     // Calc activation
     float A = 0;
     for(uint32_t i = 0;i<uniforms.imageDataLength;++i)
     {
-        A += current_training_data[i]/255.0f * weights[i+1];
+        float x = current_training_data[i]/255.0f;
+        //float x = X[thread_id][i];;
+        float w = weights[i+1];
+        float m = x * w;
+        A += m;
     }
-    A += weights[0];
+    float b = weights[0];
+    A += b;
     A = sigmod(A);
     
     outActivations[thread_id] = A;
@@ -51,10 +58,14 @@ kernel void computeGrads(device uint8_t* training_data [[buffer(0)]],
                         constant Uniforms& uniforms [[buffer(4)]],
                         uint thread_id [[thread_position_in_grid]])
 {
+   // float X[3][2] = {{ 1, 3.0f }, { -2, 0.5f }, { -1, -3.2f }};
+
     float dotProduct = 0;
     for(int i = 0;i<uniforms.numImages;++i)
     {
         float training_value = thread_id == 0 ? 1 : (training_data[i*uniforms.imageDataLength+(thread_id-1)]/255.0f);
+        //float training_value = thread_id == 0 ? 1 : X[i][thread_id-1];
+        
         dotProduct += training_value * (allActivations[i] - isCat_data[i]);
     }
     dotProduct /= uniforms.numImages;

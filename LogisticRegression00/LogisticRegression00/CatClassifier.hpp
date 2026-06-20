@@ -19,12 +19,17 @@ class CatClassifier
 public:
     
     void Init(id<MTLDevice> inDevice);
-    void Train(std::vector<std::vector<uint8_t>> const& trainData,
+    void Train(std::vector<uint8_t> const& trainData,
                std::vector<uint8_t> const& isCatData,
+               int numImages,
+               int imageWidth,
                int numIterations,
                float learningRate);
     
-    float Predict(std::vector<uint8_t> const& testData);
+    void Predict(std::vector<uint8_t> const& testData,
+                  std::vector<uint8_t> const& isCatData,
+                  int numImages,
+                  int imageWidth);
     
 private:
     id<MTLDevice> _device;
