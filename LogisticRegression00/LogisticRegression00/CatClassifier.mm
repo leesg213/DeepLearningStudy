@@ -177,7 +177,7 @@ void CatClassifier::Train(std::vector<uint8_t> const& trainData,
         [encoder setBuffer:outActivations offset:0 atIndex:5];
         [encoder dispatchThreads:MTLSizeMake(numImages, 1, 1) threadsPerThreadgroup:MTLSizeMake(32, 1, 1)];
         
-        [encoder memoryBarrierWithScope:MTLBarrierScopeBuffers];
+       // [encoder memoryBarrierWithScope:MTLBarrierScopeBuffers];
         
         [encoder setComputePipelineState:_pipelineComputeGrads];
         [encoder setBuffer:trainingDataBuffer offset:0 atIndex: 0];
