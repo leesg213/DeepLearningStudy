@@ -15,7 +15,7 @@
 // Returns a pair of (X, Y) where:
 // - X is a 2 x 400 matrix of features (transposed)
 // - Y is a 1 x 400 matrix of labels (transposed)
-- (std::pair<std::vector<std::vector<double>>, std::vector<std::vector<uint8_t>>>)loadPlanarDataset;
+- (std::pair<std::vector<std::vector<float>>, std::vector<std::vector<uint8_t>>>)loadPlanarDataset;
 
 // Visualize the planar dataset
 - (void)visualizeDataset;

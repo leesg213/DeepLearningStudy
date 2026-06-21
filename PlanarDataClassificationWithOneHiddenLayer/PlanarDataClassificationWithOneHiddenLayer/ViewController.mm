@@ -12,7 +12,7 @@
 #include <cmath>
 
 @implementation ViewController {
-    std::vector<std::vector<double>> _datasetX;
+    std::vector<std::vector<float>> _datasetX;
     std::vector<std::vector<uint8_t>> _datasetY;
     DatasetVisualizationView *_visualizationView;
 }
@@ -53,18 +53,18 @@
 
 #pragma mark - C++ Methods
 
-- (std::pair<std::vector<std::vector<double>>, std::vector<std::vector<uint8_t>>>)loadPlanarDataset {
+- (std::pair<std::vector<std::vector<float>>, std::vector<std::vector<uint8_t>>>)loadPlanarDataset {
     // Set random seed for reproducibility
     std::mt19937 rng(1);
-    std::normal_distribution<double> normal_dist(0.0, 1.0);
+    std::normal_distribution<float> normal_dist(0.0, 1.0);
     
     const int m = 400; // number of examples
     const int N = m / 2; // number of points per class
     const int D = 2; // dimensionality
-    const double a = 4.0; // maximum ray of the flower
+    const float a = 4.0; // maximum ray of the flower
     
     // Initialize X matrix (m x D) and Y labels (m x 1)
-    std::vector<std::vector<double>> X(m, std::vector<double>(D, 0.0));
+    std::vector<std::vector<float>> X(m, std::vector<float>(D, 0.0));
     std::vector<std::vector<uint8_t>> Y(m, std::vector<uint8_t>(1, 0));
     
     for (int j = 0; j < 2; j++) {
@@ -72,10 +72,10 @@
             int idx = N * j + i;
             
             // Generate theta: linspace from j*3.12 to (j+1)*3.12 with random noise
-            double t = j * 3.12 + (double)i / (N - 1) * 3.12 + normal_dist(rng) * 0.2;
+            float t = j * 3.12 + (float)i / (N - 1) * 3.12 + normal_dist(rng) * 0.2;
             
             // Generate radius: a*sin(4*t) with random noise
-            double r = a * std::sin(4.0 * t) + normal_dist(rng) * 0.2;
+            float r = a * std::sin(4.0 * t) + normal_dist(rng) * 0.2;
             
             // Set X values: [r*sin(t), r*cos(t)]
             X[idx][0] = r * std::sin(t);
@@ -87,7 +87,7 @@
     }
     
     // Transpose X (m x D -> D x m)
-    std::vector<std::vector<double>> X_T(D, std::vector<double>(m));
+    std::vector<std::vector<float>> X_T(D, std::vector<float>(m));
     for (int i = 0; i < m; i++) {
         for (int j = 0; j < D; j++) {
             X_T[j][i] = X[i][j];
