@@ -32,6 +32,18 @@ void OneHiddenLayerModel::Init()
         NSLog(@"Failed to load pipeline. %@", error.localizedDescription);
     }
     
+    _pipelineOptimize = [_device newComputePipelineStateWithFunction:[defaultLibrary newFunctionWithName:@"optimize"] error:&error];
+    if(error != nil)
+    {
+        NSLog(@"Failed to load pipeline. %@", error.localizedDescription);
+    }
+    
+    _pipelineClearGrads = [_device newComputePipelineStateWithFunction:[defaultLibrary newFunctionWithName:@"clear_grads"] error:&error];
+    if(error != nil)
+    {
+        NSLog(@"Failed to load pipeline. %@", error.localizedDescription);
+    }
+    
     // Initialize random number generator with a random seed
     _rng = std::mt19937(std::random_device{}());
     _normalDist = std::normal_distribution<float>(0.0f, 1.0f);
@@ -152,6 +164,7 @@ void OneHiddenLayerModel::TrainF(std::vector<float> const& train_x,
     uniforms_data->numFeatures = num_features;
     uniforms_data->normalizer_scaler = 1;
     uniforms_data->hidden_layer_size = hidden_layer_size;
+    uniforms_data->learning_rate = learningRate;
     
     int const num_total_weights = ((num_features+1)*hidden_layer_size+(hidden_layer_size+1));
 
@@ -179,11 +192,12 @@ void OneHiddenLayerModel::TrainF(std::vector<float> const& train_x,
     }
     weights_values[(num_features+1)*hidden_layer_size] = 0;
     
+    id<MTLCommandBuffer> cmdBuffer = [_cmdQueue commandBuffer];
+    cmdBuffer.label = @"Training Command Buffer";
+
     for(int iter = 0;iter < numIterations; ++iter)
     {
-        NSLog(@"Iteration : %d", iter);
-        
-        memset(outGrads.contents, 0, outGrads.length); // reset grads
+       // NSLog(@"Iteration : %d", iter);
         
         // Start Metal GPU capture
         MTLCaptureManager *captureManager = nil;
@@ -202,9 +216,6 @@ void OneHiddenLayerModel::TrainF(std::vector<float> const& train_x,
             }
         }
         
-        id<MTLCommandBuffer> cmdBuffer = [_cmdQueue commandBuffer];
-        cmdBuffer.label = @"Training Command Buffer";
-        
         id<MTLComputeCommandEncoder> encoder = [cmdBuffer computeCommandEncoder];
         encoder.label = @"Training Compute Encoder";
         
@@ -217,6 +228,10 @@ void OneHiddenLayerModel::TrainF(std::vector<float> const& train_x,
         [encoder setBuffer:outActivations offset:0 atIndex:5];
         [encoder dispatchThreads:MTLSizeMake(num_trains, 1, 1) threadsPerThreadgroup:MTLSizeMake(32, 1, 1)];
         
+        [encoder setComputePipelineState:_pipelineClearGrads];
+        [encoder setBuffer:outGrads offset:0 atIndex: 0];
+        [encoder dispatchThreads:MTLSizeMake(num_total_weights, 1, 1) threadsPerThreadgroup:MTLSizeMake(32, 1, 1)];
+
         [encoder setComputePipelineState:_pipelineComputeGradsF_1HiddenLayer];
         [encoder setBuffer:trainingDataBuffer offset:0 atIndex: 0];
         [encoder setBuffer:train_y_data_buffer offset:0 atIndex: 1];
@@ -225,26 +240,14 @@ void OneHiddenLayerModel::TrainF(std::vector<float> const& train_x,
         [encoder setBuffer:weights offset:0 atIndex:4];
         [encoder setBuffer:uniforms offset:0 atIndex:5];
         [encoder dispatchThreads:MTLSizeMake(num_trains, 1, 1) threadsPerThreadgroup:MTLSizeMake(32, 1, 1)];
-
-        [encoder endEncoding];
-        [cmdBuffer commit];
-        [cmdBuffer waitUntilCompleted];
-
-        float cost = CalcCost(outCosts, num_trains);
-        NSLog(@"Cost : %f", cost);
-
-        char weight_log[1000];
-        weight_log[0] = 0;
         
-        float* gradValues = (float*)outGrads.contents;
-        // Update weights
-        float* weight_values = (float*)weights.contents;
-        for(int i = 0;i<num_total_weights;++i)
-        {
-            weight_values[i] = weight_values[i] - learningRate * gradValues[i] / num_trains;
-           // strcat(weight_log, [NSString stringWithFormat:@"%f,", weight_values[i]].UTF8String);
-        }
-        //NSLog(@"Weights : %s", weight_log);
+        [encoder setComputePipelineState:_pipelineOptimize];
+        [encoder setBuffer:weights offset:0 atIndex: 0];
+        [encoder setBuffer:outGrads offset:0 atIndex: 1];
+        [encoder setBuffer:uniforms offset:0 atIndex:2];
+        [encoder dispatchThreads:MTLSizeMake(num_total_weights, 1, 1) threadsPerThreadgroup:MTLSizeMake(32, 1, 1)];
+  
+        [encoder endEncoding];
 
         if(captureManager)
         {
@@ -253,6 +256,8 @@ void OneHiddenLayerModel::TrainF(std::vector<float> const& train_x,
             NSLog(@"Metal GPU capture stopped");
         }
     }
+    [cmdBuffer commit];
+    [cmdBuffer waitUntilCompleted];
 
     _weights.clear();
     {

@@ -48,7 +48,7 @@ private:
     id<MTLDevice> _device;
     id<MTLCommandQueue> _cmdQueue;
     
-    id<MTLComputePipelineState> _pipelineComputeCostF_1HiddenLayer, _pipelineComputeGradsF_1HiddenLayer;
+    id<MTLComputePipelineState> _pipelineComputeCostF_1HiddenLayer, _pipelineComputeGradsF_1HiddenLayer, _pipelineOptimize, _pipelineClearGrads;
     
     std::vector<float> _weights;
     

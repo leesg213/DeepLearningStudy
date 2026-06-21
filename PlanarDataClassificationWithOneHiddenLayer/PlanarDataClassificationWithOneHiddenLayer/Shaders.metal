@@ -260,3 +260,17 @@ kernel void computeGradsF_1HiddenLayer_V2(device float* train_data_x [[buffer(0)
         }
     }
 }
+
+kernel void clear_grads(device float* outGrads [[buffer(0)]],
+                        uint thread_id [[thread_position_in_grid]])
+{
+    outGrads[thread_id] = 0;
+}
+
+kernel void optimize(device float* weights [[buffer(0)]],
+                     device float* outGrads [[buffer(1)]],
+                     constant Uniforms& uniforms [[buffer(2)]],
+                     uint thread_id [[thread_position_in_grid]])
+{
+    weights[thread_id] = weights[thread_id] - uniforms.learning_rate * outGrads[thread_id] / uniforms.numImages;
+}
