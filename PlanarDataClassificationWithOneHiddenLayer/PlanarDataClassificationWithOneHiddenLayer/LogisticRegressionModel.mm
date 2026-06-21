@@ -221,7 +221,7 @@ void LogisticRegressionModel::PredictF(std::vector<float> const& test_x,
         float sum = 0;
         for(int j = 0;j<num_features;++j)
         {
-            sum += weight_values[j+1] * (test_x[i*num_features+j]/255.0f);
+            sum += weight_values[j+1] * (test_x[i*num_features+j]);
         }
         sum += weight_values[0];
         
