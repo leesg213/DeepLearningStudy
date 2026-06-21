@@ -219,3 +219,44 @@ kernel void computeGradsF_1HiddenLayer(device float* train_data_x [[buffer(0)]],
     
     outGrads[thread_id] = sum / uniforms.numImages;
 }
+
+
+kernel void computeGradsF_1HiddenLayer_V2(device float* train_data_x [[buffer(0)]],
+                        device uint8_t* train_data_y [[buffer(1)]],
+                        device float* allActivations [[buffer(2)]],
+                        device atomic_float* outGrads [[buffer(3)]],
+                       device float* weights [[buffer(4)]],
+                        constant Uniforms& uniforms [[buffer(5)]],
+                        uint thread_id [[thread_position_in_grid]])
+{
+    const int num_total_weights = (uniforms.numFeatures+1) * uniforms.numHiddenLayers + (uniforms.numHiddenLayers + 1);
+    const int num_weights_per_hidden_node = uniforms.numFeatures+1;
+    const int num_activations_per_train = uniforms.numHiddenLayers+1;
+    const int last_weight_start_pos = num_weights_per_hidden_node*uniforms.numHiddenLayers;
+    
+    float a2 = allActivations[thread_id*num_activations_per_train+num_activations_per_train-1];
+    float y = train_data_y[thread_id];
+    float dZ2 = (a2 - y);
+
+    for(int weight_id = 0;weight_id<uniforms.numHiddenLayers+1;++weight_id)
+    {
+        float a1 = weight_id == 0 ? 1 : allActivations[thread_id*num_activations_per_train+weight_id-1];
+        float grad = a1 * dZ2;
+        
+        atomic_fetch_add_explicit(outGrads+last_weight_start_pos+weight_id, grad, memory_order_relaxed);
+    }
+    
+    for(int hidden_node_id = 0;hidden_node_id<uniforms.numHiddenLayers;++hidden_node_id)
+    {
+        float W2 = weights[last_weight_start_pos+hidden_node_id+1];
+        float a1 = allActivations[thread_id*num_activations_per_train+hidden_node_id];
+        float dZ1 = W2 * dZ2 * ( 1 - metal::pow(a1, 2.0f));
+        for(int weight_id = 0;weight_id<uniforms.numFeatures+1;++weight_id)
+        {
+            float x = weight_id == 0 ? 1 : train_data_x[thread_id*uniforms.numFeatures+weight_id-1];
+            float grad = dZ1 * x;
+            
+            atomic_fetch_add_explicit(outGrads+hidden_node_id*num_weights_per_hidden_node+weight_id, grad, memory_order_relaxed);
+        }
+    }
+}

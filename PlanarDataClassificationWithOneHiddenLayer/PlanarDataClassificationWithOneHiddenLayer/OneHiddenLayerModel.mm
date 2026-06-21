@@ -7,6 +7,7 @@
 
 #include "OneHiddenLayerModel.hpp"
 #include "ShaderTypes.h"
+#include <chrono>
 
 static int capture_trace_iter = -1;
 
@@ -25,7 +26,7 @@ void OneHiddenLayerModel::Init()
         NSLog(@"Failed to load pipeline. %@", error.localizedDescription);
     }
     
-    _pipelineComputeGradsF_1HiddenLayer = [_device newComputePipelineStateWithFunction:[defaultLibrary newFunctionWithName:@"computeGradsF_1HiddenLayer"] error:&error];
+    _pipelineComputeGradsF_1HiddenLayer = [_device newComputePipelineStateWithFunction:[defaultLibrary newFunctionWithName:@"computeGradsF_1HiddenLayer_V2"] error:&error];
     if(error != nil)
     {
         NSLog(@"Failed to load pipeline. %@", error.localizedDescription);
@@ -142,6 +143,9 @@ void OneHiddenLayerModel::TrainF(std::vector<float> const& train_x,
                                     int numIterations,
                                     float learningRate)
 {
+    // Start timing
+    auto startTime = std::chrono::high_resolution_clock::now();
+    
     id<MTLBuffer> uniforms = [_device newBufferWithLength:sizeof(Uniforms) options:MTLResourceStorageModeShared];
     Uniforms* uniforms_data = (Uniforms*)uniforms.contents;
     uniforms_data->numImages = num_trains;
@@ -178,6 +182,8 @@ void OneHiddenLayerModel::TrainF(std::vector<float> const& train_x,
     for(int iter = 0;iter < numIterations; ++iter)
     {
         NSLog(@"Iteration : %d", iter);
+        
+        memset(outGrads.contents, 0, outGrads.length); // reset grads
         
         // Start Metal GPU capture
         MTLCaptureManager *captureManager = nil;
@@ -218,7 +224,7 @@ void OneHiddenLayerModel::TrainF(std::vector<float> const& train_x,
         [encoder setBuffer:outGrads offset:0 atIndex: 3];
         [encoder setBuffer:weights offset:0 atIndex:4];
         [encoder setBuffer:uniforms offset:0 atIndex:5];
-        [encoder dispatchThreads:MTLSizeMake(num_total_weights, 1, 1) threadsPerThreadgroup:MTLSizeMake(32, 1, 1)];
+        [encoder dispatchThreads:MTLSizeMake(num_trains, 1, 1) threadsPerThreadgroup:MTLSizeMake(32, 1, 1)];
 
         [encoder endEncoding];
         [cmdBuffer commit];
@@ -227,13 +233,18 @@ void OneHiddenLayerModel::TrainF(std::vector<float> const& train_x,
         float cost = CalcCost(outCosts, num_trains);
         NSLog(@"Cost : %f", cost);
 
+        char weight_log[1000];
+        weight_log[0] = 0;
+        
         float* gradValues = (float*)outGrads.contents;
         // Update weights
         float* weight_values = (float*)weights.contents;
         for(int i = 0;i<num_total_weights;++i)
         {
-            weight_values[i] = weight_values[i] - learningRate * gradValues[i];
+            weight_values[i] = weight_values[i] - learningRate * gradValues[i] / num_trains;
+           // strcat(weight_log, [NSString stringWithFormat:@"%f,", weight_values[i]].UTF8String);
         }
+        //NSLog(@"Weights : %s", weight_log);
 
         if(captureManager)
         {
@@ -252,7 +263,17 @@ void OneHiddenLayerModel::TrainF(std::vector<float> const& train_x,
         }
     }
 
+    // End timing and calculate duration
+    auto endTime = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+    
+    // Log timing results
+    double seconds = duration.count() / 1000.0;
+    NSLog(@"====================================");
     NSLog(@"Train complete");
+    NSLog(@"Total training time: %.3f seconds (%.2f ms)", seconds, (double)duration.count());
+    NSLog(@"Time per iteration: %.3f ms", (double)duration.count() / numIterations);
+    NSLog(@"====================================");
 }
 #pragma mark - Random Number Generation (np.random.randn port)
 
