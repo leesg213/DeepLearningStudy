@@ -12,7 +12,7 @@ typedef struct
 {
     uint32_t numImages;
     uint32_t numFeatures;
-    uint32_t numHiddenLayers;
+    uint32_t hidden_layer_size;
     float normalizer_scaler;
 } Uniforms;
 

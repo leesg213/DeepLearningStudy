@@ -190,7 +190,9 @@ struct ViewTransform {
     std::vector<float> train_x = [self prepareTrainingData:&num_trains numFeatures:&num_features];
     std::vector<uint8_t> train_y = [self prepareTrainingLabels:num_trains];
     
-    model.TrainF(train_x, train_y, 4, num_trains, num_features, 10000, 1.2);
+    int hidden_layer_size = 4;
+    
+    model.TrainF(train_x, train_y, hidden_layer_size, num_trains, num_features, 10000, 1.2);
     
 #if true
     // Generate test points
@@ -199,7 +201,7 @@ struct ViewTransform {
     
     // Get predictions
     std::vector<float> predict_results;
-    model.PredictF(test_x, 4, num_tests, 2, predict_results);
+    model.PredictF(test_x, hidden_layer_size, num_tests, 2, predict_results);
     
     // Draw predictions
     ViewTransform transform = [self calculateViewTransform];

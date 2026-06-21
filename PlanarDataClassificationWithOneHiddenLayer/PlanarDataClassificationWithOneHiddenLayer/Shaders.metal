@@ -131,9 +131,9 @@ kernel void computeCostF_1HiddenLayer(device float* in_train_data_x [[buffer(0)]
     uint8_t train_data_y = in_train_data_y[thread_id];
     
     const int num_weights_per_hidden_node = uniforms.numFeatures+1;
-    const int num_activations_per_train = uniforms.numHiddenLayers+1;
+    const int num_activations_per_train = uniforms.hidden_layer_size+1;
     
-    for(uint32_t h = 0;h<uniforms.numHiddenLayers;++h)
+    for(uint32_t h = 0;h<uniforms.hidden_layer_size;++h)
     {
         float Z1 = 0;
         for(uint32_t i = 0;i<uniforms.numFeatures;++i)
@@ -150,9 +150,9 @@ kernel void computeCostF_1HiddenLayer(device float* in_train_data_x [[buffer(0)]
     }
     
     // Calc activation
-    const int last_weight_start_pos = num_weights_per_hidden_node*uniforms.numHiddenLayers;
+    const int last_weight_start_pos = num_weights_per_hidden_node*uniforms.hidden_layer_size;
     float Z2 = 0;
-    for(uint32_t i = 0;i<uniforms.numHiddenLayers;++i)
+    for(uint32_t i = 0;i<uniforms.hidden_layer_size;++i)
     {
         float x = outActivations[thread_id*num_activations_per_train+i];
         float w = weights[last_weight_start_pos+i+1];
@@ -162,7 +162,7 @@ kernel void computeCostF_1HiddenLayer(device float* in_train_data_x [[buffer(0)]
     Z2 += weights[last_weight_start_pos];
     float A2 = sigmoid(Z2);
     
-    outActivations[thread_id*num_activations_per_train+uniforms.numHiddenLayers] = A2;
+    outActivations[thread_id*num_activations_per_train+uniforms.hidden_layer_size] = A2;
     
     float cost = train_data_y*metal::log(A2)+(1-train_data_y)*metal::log(1-A2);
     // Calc cost
@@ -177,10 +177,10 @@ kernel void computeGradsF_1HiddenLayer(device float* train_data_x [[buffer(0)]],
                         constant Uniforms& uniforms [[buffer(5)]],
                         uint thread_id [[thread_position_in_grid]])
 {
-    const int num_total_weights = (uniforms.numFeatures+1) * uniforms.numHiddenLayers + (uniforms.numHiddenLayers + 1);
+    const int num_total_weights = (uniforms.numFeatures+1) * uniforms.hidden_layer_size + (uniforms.hidden_layer_size + 1);
     const int num_weights_per_hidden_node = uniforms.numFeatures+1;
-    const int num_activations_per_train = uniforms.numHiddenLayers+1;
-    const int last_weight_start_pos = num_weights_per_hidden_node*uniforms.numHiddenLayers;
+    const int num_activations_per_train = uniforms.hidden_layer_size+1;
+    const int last_weight_start_pos = num_weights_per_hidden_node*uniforms.hidden_layer_size;
     
     if(thread_id >= last_weight_start_pos)
     {
@@ -229,16 +229,16 @@ kernel void computeGradsF_1HiddenLayer_V2(device float* train_data_x [[buffer(0)
                         constant Uniforms& uniforms [[buffer(5)]],
                         uint thread_id [[thread_position_in_grid]])
 {
-    const int num_total_weights = (uniforms.numFeatures+1) * uniforms.numHiddenLayers + (uniforms.numHiddenLayers + 1);
+    const int num_total_weights = (uniforms.numFeatures+1) * uniforms.hidden_layer_size + (uniforms.hidden_layer_size + 1);
     const int num_weights_per_hidden_node = uniforms.numFeatures+1;
-    const int num_activations_per_train = uniforms.numHiddenLayers+1;
-    const int last_weight_start_pos = num_weights_per_hidden_node*uniforms.numHiddenLayers;
+    const int num_activations_per_train = uniforms.hidden_layer_size+1;
+    const int last_weight_start_pos = num_weights_per_hidden_node*uniforms.hidden_layer_size;
     
     float a2 = allActivations[thread_id*num_activations_per_train+num_activations_per_train-1];
     float y = train_data_y[thread_id];
     float dZ2 = (a2 - y);
 
-    for(int weight_id = 0;weight_id<uniforms.numHiddenLayers+1;++weight_id)
+    for(int weight_id = 0;weight_id<uniforms.hidden_layer_size+1;++weight_id)
     {
         float a1 = weight_id == 0 ? 1 : allActivations[thread_id*num_activations_per_train+weight_id-1];
         float grad = a1 * dZ2;
@@ -246,7 +246,7 @@ kernel void computeGradsF_1HiddenLayer_V2(device float* train_data_x [[buffer(0)
         atomic_fetch_add_explicit(outGrads+last_weight_start_pos+weight_id, grad, memory_order_relaxed);
     }
     
-    for(int hidden_node_id = 0;hidden_node_id<uniforms.numHiddenLayers;++hidden_node_id)
+    for(int hidden_node_id = 0;hidden_node_id<uniforms.hidden_layer_size;++hidden_node_id)
     {
         float W2 = weights[last_weight_start_pos+hidden_node_id+1];
         float a1 = allActivations[thread_id*num_activations_per_train+hidden_node_id];

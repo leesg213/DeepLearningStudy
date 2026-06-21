@@ -21,14 +21,14 @@ public:
     
     void TrainF(std::vector<float> const& train_x,
                std::vector<uint8_t> const& train_y,
-                int num_hidden_layers,
+                int hidden_layer_size,
                int num_trains,
                int num_features,
                int numIterations,
                float learningRate);
     
     void PredictF(std::vector<float> const& test_x,
-                  int num_hidden_layers,
+                  int hidden_layer_size,
                   int num_tests,
                   int num_features,
                  std::vector<float>& out_results);

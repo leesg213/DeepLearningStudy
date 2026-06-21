@@ -52,7 +52,7 @@ float OneHiddenLayerModel::CalcCost(id<MTLBuffer> allCosts, size_t num_trains)
     return cost;
 }
 void OneHiddenLayerModel::PredictF(std::vector<float> const& test_x,
-                                   int num_hidden_layers,
+                                   int hidden_layer_size,
                                       int num_tests,
                                       int num_features,
                                       std::vector<float>& out_results)
@@ -65,12 +65,12 @@ void OneHiddenLayerModel::PredictF(std::vector<float> const& test_x,
     uniforms_data->numImages = num_tests;
     uniforms_data->numFeatures = num_features;
     uniforms_data->normalizer_scaler = 1;
-    uniforms_data->numHiddenLayers = num_hidden_layers;
+    uniforms_data->hidden_layer_size = hidden_layer_size;
     
-    int const num_total_weights = ((num_features+1)*num_hidden_layers+(num_hidden_layers+1));
+    int const num_total_weights = ((num_features+1)*hidden_layer_size+(hidden_layer_size+1));
 
     id<MTLBuffer> outCosts = [_device newBufferWithLength:num_tests*sizeof(float) options:MTLResourceStorageModeShared];
-    id<MTLBuffer> outActivations = [_device newBufferWithLength:(num_tests*(num_hidden_layers+1))*sizeof(float) options:MTLResourceStorageModeShared];
+    id<MTLBuffer> outActivations = [_device newBufferWithLength:(num_tests*(hidden_layer_size+1))*sizeof(float) options:MTLResourceStorageModeShared];
     id<MTLBuffer> outGrads = [_device newBufferWithLength:num_total_weights*sizeof(float) options:MTLResourceStorageModeShared];
 
     id<MTLBuffer> trainingDataBuffer = [_device newBufferWithLength:test_x.size()*sizeof(float) options:(MTLResourceCPUCacheModeDefaultCache | MTLResourceStorageModeShared)];
@@ -129,7 +129,7 @@ void OneHiddenLayerModel::PredictF(std::vector<float> const& test_x,
     float* activation_values = (float*)outActivations.contents;
     for(int i = 0;i<num_tests;++i)
     {
-        float activation = activation_values[i*(num_hidden_layers+1)+num_hidden_layers];
+        float activation = activation_values[i*(hidden_layer_size+1)+hidden_layer_size];
         out_results.push_back(activation);
     }
 }
@@ -137,7 +137,7 @@ void OneHiddenLayerModel::PredictF(std::vector<float> const& test_x,
 
 void OneHiddenLayerModel::TrainF(std::vector<float> const& train_x,
                                     std::vector<uint8_t> const& train_y,
-                                 int num_hidden_layers,
+                                 int hidden_layer_size,
                                     int num_trains,
                                     int num_features,
                                     int numIterations,
@@ -151,12 +151,12 @@ void OneHiddenLayerModel::TrainF(std::vector<float> const& train_x,
     uniforms_data->numImages = num_trains;
     uniforms_data->numFeatures = num_features;
     uniforms_data->normalizer_scaler = 1;
-    uniforms_data->numHiddenLayers = num_hidden_layers;
+    uniforms_data->hidden_layer_size = hidden_layer_size;
     
-    int const num_total_weights = ((num_features+1)*num_hidden_layers+(num_hidden_layers+1));
+    int const num_total_weights = ((num_features+1)*hidden_layer_size+(hidden_layer_size+1));
 
     id<MTLBuffer> outCosts = [_device newBufferWithLength:num_trains*sizeof(float) options:MTLResourceStorageModeShared];
-    id<MTLBuffer> outActivations = [_device newBufferWithLength:(num_trains*(num_hidden_layers+1))*sizeof(float) options:MTLResourceStorageModeShared];
+    id<MTLBuffer> outActivations = [_device newBufferWithLength:(num_trains*(hidden_layer_size+1))*sizeof(float) options:MTLResourceStorageModeShared];
     id<MTLBuffer> outGrads = [_device newBufferWithLength:num_total_weights*sizeof(float) options:MTLResourceStorageModeShared];
 
     id<MTLBuffer> trainingDataBuffer = [_device newBufferWithLength:train_x.size()*sizeof(float) options:(MTLResourceCPUCacheModeDefaultCache | MTLResourceStorageModeShared)];
@@ -173,11 +173,11 @@ void OneHiddenLayerModel::TrainF(std::vector<float> const& train_x,
     }
     memcpy(weights.contents, random_weights.data(), weights.length);
     float* weights_values = (float*)weights.contents;
-    for(int i = 0;i<num_hidden_layers;++i)
+    for(int i = 0;i<hidden_layer_size;++i)
     {
         weights_values[i*(num_features+1)] = 0;
     }
-    weights_values[(num_features+1)*num_hidden_layers] = 0;
+    weights_values[(num_features+1)*hidden_layer_size] = 0;
     
     for(int iter = 0;iter < numIterations; ++iter)
     {
