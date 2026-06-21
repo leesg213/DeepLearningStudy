@@ -9,6 +9,7 @@
 #include <vector>
 #include <algorithm>
 #include "LogisticRegressionModel.hpp"
+#include "OneHiddenLayerModel.hpp"
 
 @implementation DatasetVisualizationView {
     std::vector<std::vector<float>> _X;
@@ -130,6 +131,94 @@
     }
     
 }
+
+
+- (void)drawOneHiddenLayerResult
+{
+    OneHiddenLayerModel model;
+    model.Init();
+    
+    int num_features = _X.size();
+    int num_trains = _X[0].size();
+    
+    std::vector<float> train_x(num_trains * num_features);
+    for(int i = 0;i<num_trains;++i)
+    {
+        train_x[i*num_features+0] = _X[0][i] / _maxX;
+        train_x[i*num_features+1] = _X[1][i] / _maxY;
+        
+    }
+    std::vector<uint8_t> train_y(num_trains);
+    memcpy(train_y.data(), _Y[0].data(), num_trains);
+    
+    model.TrainF(train_x, train_y, 4, num_trains, num_features, 10000, 1.2);
+    
+#if true
+    int num_plots = 100;
+    float x_increment = (_maxX - _minX) / num_plots;
+    float y_increment = (_maxY - _minY) / num_plots;
+    
+    std::vector<float> test_x;
+    
+    for(float x = _minX;x<_maxX;x += x_increment)
+    {
+        for(float y= _minY;y<_maxY; y += y_increment)
+        {
+            test_x.push_back(x/_maxX);
+            test_x.push_back(y/_maxY);
+        }
+    }
+    
+    int num_tests = test_x.size()/2;
+    std::vector<float> predict_results;
+
+    model.PredictF(test_x, 4, num_tests, 2, predict_results);
+    
+    NSRect bounds = [self bounds];
+    double width = NSWidth(bounds);
+    double height = NSHeight(bounds);
+    
+    // Calculate scale to fit data in view
+    double scaleX = width / (_maxX - _minX);
+    double scaleY = height / (_maxY - _minY);
+    
+    // Use the smaller scale to maintain aspect ratio
+    double scale = std::min(scaleX, scaleY);
+    
+    // Calculate offsets to center the data
+    double offsetX = (width - (_maxX - _minX) * scale) / 2.0;
+    double offsetY = (height - (_maxY - _minY) * scale) / 2.0;
+    
+    // Disc radius in points
+    double discRadius = 3.0;
+    
+    for(int i = 0;i<num_tests;++i)
+    {
+        float result = predict_results[i];
+        
+        double x = test_x[i*2+0]*_maxX;
+        double y = test_x[i*2+1]*_maxY;
+        uint8_t label = predict_results[i]>0.5 ? 1 : 0;
+        
+        // Transform to view coordinates
+        double viewX = (x - _minX) * scale + offsetX;
+        double viewY = (y - _minY) * scale + offsetY;
+        
+        // Set color based on label
+        // Y=0 -> Blue, Y=1 -> Red
+        NSColor *color = (label == 1) ? [NSColor cyanColor] : [NSColor systemPinkColor];
+        [color setFill];
+        
+        // Draw disc
+        NSRect discRect = NSMakeRect(viewX - discRadius,
+                                     viewY - discRadius,
+                                     discRadius * 2,
+                                     discRadius * 2);
+        NSBezierPath *path = [NSBezierPath bezierPathWithOvalInRect:discRect];
+        [path fill];
+    }
+#endif
+}
 - (void)drawRect:(NSRect)dirtyRect {
     [super drawRect:dirtyRect];
     
@@ -141,7 +230,8 @@
         return;
     }
     
-    [self drawLogisticRegressionResult];
+    //[self drawLogisticRegressionResult];
+    [self drawOneHiddenLayerResult];
     
     NSRect bounds = [self bounds];
     double width = NSWidth(bounds);
