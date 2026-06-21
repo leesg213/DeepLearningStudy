@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<VariablesViewState
+   version = "1.0">
+   <ContextStates>
+      <ContextState
+         contextName = "LogisticRegressionModel::TrainF:LogisticRegressionModel.mm">
+         <PersistentStrings>
+            <PersistentString
+               value = "weight_values[i]">
+            </PersistentString>
+            <PersistentString
+               value = "gradValues[i]">
+            </PersistentString>
+         </PersistentStrings>
+      </ContextState>
+   </ContextStates>
+</VariablesViewState>
