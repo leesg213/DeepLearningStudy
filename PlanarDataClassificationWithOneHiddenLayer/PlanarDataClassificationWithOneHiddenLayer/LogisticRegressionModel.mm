@@ -9,7 +9,7 @@
 #include "ShaderTypes.h"
 #include <simd/simd.h>
 
-static bool captureTrace = false;
+static int capture_trace_iter = -1;
 
 void LogisticRegressionModel::Init()
 {
@@ -102,12 +102,12 @@ void LogisticRegressionModel::Train(std::vector<uint8_t> const& train_x,
                                     float learningRate)
 {
     
-    size_t imageDataLength = num_features;
+    size_t numFeatures = num_features;
     
     id<MTLBuffer> uniforms = [_device newBufferWithLength:sizeof(Uniforms) options:MTLResourceStorageModeShared];
     Uniforms* uniforms_data = (Uniforms*)uniforms.contents;
     uniforms_data->numImages = num_trains;
-    uniforms_data->numFeatures = imageDataLength;
+    uniforms_data->numFeatures = numFeatures;
     uniforms_data->normalizer_scaler = 1;
     
     id<MTLBuffer> outCosts = [_device newBufferWithLength:num_trains*sizeof(float) options:MTLResourceStorageModeShared];
@@ -120,7 +120,7 @@ void LogisticRegressionModel::Train(std::vector<uint8_t> const& train_x,
     id<MTLBuffer> isCatDataBuffer = [_device newBufferWithLength:num_trains options:MTLResourceStorageModeShared];
     memcpy(isCatDataBuffer.contents, &train_y[0], num_trains);
     
-    _weights = [_device newBufferWithLength:(imageDataLength+1)*sizeof(float) options:MTLResourceStorageModeShared];
+    _weights = [_device newBufferWithLength:(numFeatures+1)*sizeof(float) options:MTLResourceStorageModeShared];
     memset(_weights.contents, 0, _weights.length);
     
     for(int iter = 0;iter < numIterations; ++iter)
@@ -129,7 +129,7 @@ void LogisticRegressionModel::Train(std::vector<uint8_t> const& train_x,
         
         // Start Metal GPU capture
         MTLCaptureManager *captureManager = nil;
-        if(captureTrace && iter == 0)
+        if(iter == capture_trace_iter)
         {
             captureManager = [MTLCaptureManager sharedCaptureManager];
             MTLCaptureDescriptor *captureDescriptor = [[MTLCaptureDescriptor alloc] init];
@@ -179,7 +179,7 @@ void LogisticRegressionModel::Train(std::vector<uint8_t> const& train_x,
         float* gradValues = (float*)outGrads.contents;
         // Update weights
         float* weight_values = (float*)_weights.contents;
-        for(int i = 0;i<imageDataLength+1;++i)
+        for(int i = 0;i<numFeatures+1;++i)
         {
             weight_values[i] = weight_values[i] - learningRate * gradValues[i];
         }
@@ -194,8 +194,8 @@ void LogisticRegressionModel::Train(std::vector<uint8_t> const& train_x,
     
     {
         float* weight_values = (float*)_weights.contents;
-        trained_weights.resize(imageDataLength+1);
-        for(int i = 0;i<imageDataLength+1;++i)
+        trained_weights.resize(numFeatures+1);
+        for(int i = 0;i<numFeatures+1;++i)
         {
             trained_weights[i] = weight_values[i];
         }
@@ -239,12 +239,12 @@ void LogisticRegressionModel::TrainF(std::vector<float> const& train_x,
                                     float learningRate)
 {
     
-    size_t imageDataLength = num_features;
+    size_t numFeatures = num_features;
     
     id<MTLBuffer> uniforms = [_device newBufferWithLength:sizeof(Uniforms) options:MTLResourceStorageModeShared];
     Uniforms* uniforms_data = (Uniforms*)uniforms.contents;
     uniforms_data->numImages = num_trains;
-    uniforms_data->numFeatures = imageDataLength;
+    uniforms_data->numFeatures = numFeatures;
     uniforms_data->normalizer_scaler = 1;
     
     id<MTLBuffer> outCosts = [_device newBufferWithLength:num_trains*sizeof(float) options:MTLResourceStorageModeShared];
@@ -257,7 +257,7 @@ void LogisticRegressionModel::TrainF(std::vector<float> const& train_x,
     id<MTLBuffer> isCatDataBuffer = [_device newBufferWithLength:num_trains options:MTLResourceStorageModeShared];
     memcpy(isCatDataBuffer.contents, &train_y[0], num_trains);
     
-    _weights = [_device newBufferWithLength:(imageDataLength+1)*sizeof(float) options:MTLResourceStorageModeShared];
+    _weights = [_device newBufferWithLength:(numFeatures+1)*sizeof(float) options:MTLResourceStorageModeShared];
     memset(_weights.contents, 0, _weights.length);
     
     for(int iter = 0;iter < numIterations; ++iter)
@@ -266,7 +266,7 @@ void LogisticRegressionModel::TrainF(std::vector<float> const& train_x,
         
         // Start Metal GPU capture
         MTLCaptureManager *captureManager = nil;
-        if(captureTrace && iter == 0)
+        if(iter == capture_trace_iter)
         {
             captureManager = [MTLCaptureManager sharedCaptureManager];
             MTLCaptureDescriptor *captureDescriptor = [[MTLCaptureDescriptor alloc] init];
@@ -316,7 +316,7 @@ void LogisticRegressionModel::TrainF(std::vector<float> const& train_x,
         float* gradValues = (float*)outGrads.contents;
         // Update weights
         float* weight_values = (float*)_weights.contents;
-        for(int i = 0;i<imageDataLength+1;++i)
+        for(int i = 0;i<numFeatures+1;++i)
         {
             weight_values[i] = weight_values[i] - learningRate * gradValues[i];
         }
@@ -331,8 +331,8 @@ void LogisticRegressionModel::TrainF(std::vector<float> const& train_x,
     
     {
         float* weight_values = (float*)_weights.contents;
-        trained_weights.resize(imageDataLength+1);
-        for(int i = 0;i<imageDataLength+1;++i)
+        trained_weights.resize(numFeatures+1);
+        for(int i = 0;i<numFeatures+1;++i)
         {
             trained_weights[i] = weight_values[i];
         }
