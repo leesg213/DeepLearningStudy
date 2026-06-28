@@ -6,8 +6,14 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		3BD59E122FF1734600F1D665 /* CostChartWindow.m in Sources */ = {isa = PBXBuildFile; fileRef = 3BD59E112FF1734600F1D665 /* CostChartWindow.m */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		3BAFE65B2FE8504F00CFC653 /* CatClassifierWithDeepNN.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CatClassifierWithDeepNN.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		3BD59E102FF1732200F1D665 /* CostChartWindow.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CostChartWindow.h; sourceTree = "<group>"; };
+		3BD59E112FF1734600F1D665 /* CostChartWindow.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = CostChartWindow.m; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -34,6 +40,8 @@
 			children = (
 				3BAFE65D2FE8504F00CFC653 /* CatClassifierWithDeepNN */,
 				3BAFE65C2FE8504F00CFC653 /* Products */,
+				3BD59E102FF1732200F1D665 /* CostChartWindow.h */,
+				3BD59E112FF1734600F1D665 /* CostChartWindow.m */,
 			);
 			sourceTree = "<group>";
 		};
@@ -118,6 +126,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3BD59E122FF1734600F1D665 /* CostChartWindow.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

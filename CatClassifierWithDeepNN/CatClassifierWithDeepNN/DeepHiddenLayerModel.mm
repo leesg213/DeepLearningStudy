@@ -111,6 +111,9 @@ void DeepHiddenLayerModel::PredictF(std::vector<float> const& test_x,
         last_activation_offset += num_tests * Layers[i];
     }
     
+    // Use device's maximum threadgroup size for optimal performance
+    NSUInteger threadsPerGroup = _pipelineDeepForward.maxTotalThreadsPerThreadgroup;
+    
     id<MTLCommandBuffer> cmdBuffer = [_cmdQueue commandBuffer];
     cmdBuffer.label = @"Training Command Buffer";
 
@@ -145,7 +148,7 @@ void DeepHiddenLayerModel::PredictF(std::vector<float> const& test_x,
             int activation_type_offset = layer < Layers.size()-1 ? 0 : 1;
             [encoder setBuffer:activation_types_buffer offset:activation_type_offset*sizeof(int) atIndex:6];
             
-            [encoder dispatchThreads:MTLSizeMake(num_tests * Layers[layer], 1, 1) threadsPerThreadgroup:MTLSizeMake(32, 1, 1)];
+            [encoder dispatchThreads:MTLSizeMake(num_tests * Layers[layer], 1, 1) threadsPerThreadgroup:MTLSizeMake(threadsPerGroup, 1, 1)];
             
             weight_offset += Layers[layer] * (Layers[layer-1]+1);
             activation_offset += num_tests * Layers[layer];
@@ -174,7 +177,10 @@ void DeepHiddenLayerModel::TrainF(std::vector<float> const& train_x,
                                     std::vector<uint8_t> const& train_y,
                                     int num_trains,
                                     int numIterations,
-                                    float learningRate)
+                                    float learningRate,
+                                    int logInterval,
+                                    std::vector<std::pair<int, float>>* out_costs,
+                                    CostCallback costCallback)
 {
     // Start timing
     auto startTime = std::chrono::high_resolution_clock::now();
@@ -249,13 +255,20 @@ void DeepHiddenLayerModel::TrainF(std::vector<float> const& train_x,
         last_activation_offset += num_trains * Layers[i];
     }
     
+    // Use device's maximum threadgroup sizes for optimal performance
+    NSUInteger threadsPerGroupForward = _pipelineDeepForward.maxTotalThreadsPerThreadgroup;
+    NSUInteger threadsPerGroupClearGrads = _pipelineClearGrads.maxTotalThreadsPerThreadgroup;
+    NSUInteger threadsPerGroupDAL = _pipelineDeepComputeDAL.maxTotalThreadsPerThreadgroup;
+    NSUInteger threadsPerGroupGrad = _pipelineDeepComputeGrad.maxTotalThreadsPerThreadgroup;
+    NSUInteger threadsPerGroupOptimize = _pipelineOptimize.maxTotalThreadsPerThreadgroup;
+    
     id<MTLCommandBuffer> cmdBuffer = nil;
     
     for(int iter = 0;iter < numIterations; ++iter)
     {
         if(capture_trace_iter == -1)
         {
-            if(iter%100 == 0)
+            if(iter%logInterval == 0)
             {
                 if(cmdBuffer)
                 {
@@ -265,6 +278,18 @@ void DeepHiddenLayerModel::TrainF(std::vector<float> const& train_x,
                     
                     float cost = ComputeCost(outActivations, last_activation_offset, train_y);
                     NSLog(@"[%d] Cost : %f",iter, cost);
+                    
+                    // Store cost if output vector is provided
+                    if(out_costs != nullptr)
+                    {
+                        out_costs->push_back(std::make_pair(iter, cost));
+                    }
+                    
+                    // Call callback if provided
+                    if(costCallback)
+                    {
+                        costCallback(iter, cost);
+                    }
                 }
                 
                 cmdBuffer = [_cmdQueue commandBuffer];
@@ -325,7 +350,7 @@ void DeepHiddenLayerModel::TrainF(std::vector<float> const& train_x,
                 int activation_type_offset = layer < Layers.size()-1 ? 0 : 1;
                 [encoder setBuffer:activation_types_buffer offset:activation_type_offset*sizeof(int) atIndex:6];
                 
-                [encoder dispatchThreads:MTLSizeMake(num_trains * Layers[layer], 1, 1) threadsPerThreadgroup:MTLSizeMake(32, 1, 1)];
+                [encoder dispatchThreads:MTLSizeMake(num_trains * Layers[layer], 1, 1) threadsPerThreadgroup:MTLSizeMake(threadsPerGroupForward, 1, 1)];
                 
                 weight_offset += Layers[layer] * (Layers[layer-1]+1);
                 activation_offset += num_trains * Layers[layer];
@@ -337,16 +362,16 @@ void DeepHiddenLayerModel::TrainF(std::vector<float> const& train_x,
         // Backward
         [encoder setComputePipelineState:_pipelineClearGrads];
         [encoder setBuffer:outGrads offset:0 atIndex: 0];
-        [encoder dispatchThreads:MTLSizeMake(num_total_weights, 1, 1) threadsPerThreadgroup:MTLSizeMake(32, 1, 1)];
+        [encoder dispatchThreads:MTLSizeMake(num_total_weights, 1, 1) threadsPerThreadgroup:MTLSizeMake(threadsPerGroupClearGrads, 1, 1)];
         [encoder setBuffer:dActivations offset:0 atIndex: 0];
-        [encoder dispatchThreads:MTLSizeMake(num_total_dActivations, 1, 1) threadsPerThreadgroup:MTLSizeMake(32, 1, 1)];
+        [encoder dispatchThreads:MTLSizeMake(num_total_dActivations, 1, 1) threadsPerThreadgroup:MTLSizeMake(threadsPerGroupClearGrads, 1, 1)];
 
         [encoder setComputePipelineState:_pipelineDeepComputeDAL];
         [encoder setBuffer:outActivations offset:sizeof(float)*last_activation_offset atIndex:0];
         [encoder setBuffer:train_y_data_buffer offset:0 atIndex:1];
         [encoder setBuffer:dActivations offset:sizeof(float)*(num_total_dActivations-num_trains) atIndex:2];
 
-        [encoder dispatchThreads:MTLSizeMake(num_trains, 1, 1) threadsPerThreadgroup:MTLSizeMake(32, 1, 1)];
+        [encoder dispatchThreads:MTLSizeMake(num_trains, 1, 1) threadsPerThreadgroup:MTLSizeMake(threadsPerGroupDAL, 1, 1)];
         
         {
             int weight_offset = num_total_weights - Layers[Layers.size()-1] * (Layers[Layers.size()-2]+1);
@@ -380,7 +405,7 @@ void DeepHiddenLayerModel::TrainF(std::vector<float> const& train_x,
                 int activation_type_offset = layer < Layers.size()-1 ? 0 : 1;
                 [encoder setBuffer:activation_types_buffer offset:activation_type_offset*sizeof(int) atIndex:9];
                 
-                [encoder dispatchThreads:MTLSizeMake(num_trains* Layers[layer], 1, 1) threadsPerThreadgroup:MTLSizeMake(32, 1, 1)];
+                [encoder dispatchThreads:MTLSizeMake(num_trains* Layers[layer], 1, 1) threadsPerThreadgroup:MTLSizeMake(threadsPerGroupGrad, 1, 1)];
                 
                 if(layer>1)
                 {
@@ -396,7 +421,7 @@ void DeepHiddenLayerModel::TrainF(std::vector<float> const& train_x,
         [encoder setBuffer:weights offset:0 atIndex: 0];
         [encoder setBuffer:outGrads offset:0 atIndex: 1];
         [encoder setBuffer:uniforms offset:0 atIndex:2];
-        [encoder dispatchThreads:MTLSizeMake(num_total_weights, 1, 1) threadsPerThreadgroup:MTLSizeMake(32, 1, 1)];
+        [encoder dispatchThreads:MTLSizeMake(num_total_weights, 1, 1) threadsPerThreadgroup:MTLSizeMake(threadsPerGroupOptimize, 1, 1)];
         
         
         [encoder endEncoding];

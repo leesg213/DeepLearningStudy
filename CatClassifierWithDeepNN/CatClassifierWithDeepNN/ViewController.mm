@@ -6,6 +6,7 @@
 //
 
 #import "ViewController.h"
+#import "CostChartWindow.h"
 #include <vector>
 #include <H5Cpp.h>
 #include "OneHiddenLayerModel.hpp"
@@ -111,26 +112,40 @@
 
 - (IBAction)runDeepHiddenLayerModel:(id)sender
 {
-    DeepHiddenLayerModel _DeepHiddenLayerModel;
+    // Create and show chart window immediately on main thread
+    CostChartWindow* chartWindow = [CostChartWindow createChartWithTitle:@"Deep Hidden Layer Model - Training Cost" 
+                                                            maxIterations:2500];
+    [chartWindow show];
     
-    _DeepHiddenLayerModel.Init({12288, 20, 7, 5, 1});
-    //_DeepHiddenLayerModel.Init({12288, 77, 1});
-    _DeepHiddenLayerModel.TrainF(trainset_x, trainset_y, num_trainset, 2500, 0.0075f);
-    
-    auto predict = [&](std::vector<float> const& set_x, std::vector<uint8_t>& set_y, int num_sets, std::string const& name)
-    {
-        std::vector<float> results;
-        _DeepHiddenLayerModel.PredictF(set_x, num_sets, results);
-        int num_correct = 0;
-        for(int i = 0;i<results.size();++i)
+    // Run training on background thread to keep UI responsive
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        DeepHiddenLayerModel _DeepHiddenLayerModel;
+        
+        _DeepHiddenLayerModel.Init({12288, 20, 7, 5, 1});
+        //_DeepHiddenLayerModel.Init({12288, 77, 1});
+        
+        // Train with real-time cost updates
+        _DeepHiddenLayerModel.TrainF(trainset_x, trainset_y, num_trainset, 2500, 0.0075f, 10, nullptr,
+            [chartWindow](int iteration, float cost) {
+                [chartWindow updateWithIteration:iteration cost:cost];
+            });
+        
+        // Prediction also on background thread
+        auto predict = [&](std::vector<float> const& set_x, std::vector<uint8_t>& set_y, int num_sets, std::string const& name)
         {
-            int predict = results[i] >= 0.5f;
-            if(predict == set_y[i]) num_correct++;
-        }
-        NSLog(@"[%s] Predict : %d / %d (%.3f%)", name.c_str(), num_correct, results.size(), num_correct/((float)results.size())*100.0f);
-    };
-    
-    predict(trainset_x, trainset_y, num_trainset, "TrainSet");
-    predict(testset_x, testset_y, num_testset, "TestSet");
+            std::vector<float> results;
+            _DeepHiddenLayerModel.PredictF(set_x, num_sets, results);
+            int num_correct = 0;
+            for(int i = 0;i<results.size();++i)
+            {
+                int predict = results[i] >= 0.5f;
+                if(predict == set_y[i]) num_correct++;
+            }
+            NSLog(@"[%s] Predict : %d / %d (%.3f%)", name.c_str(), num_correct, results.size(), num_correct/((float)results.size())*100.0f);
+        };
+        
+        predict(trainset_x, trainset_y, num_trainset, "TrainSet");
+        predict(testset_x, testset_y, num_testset, "TestSet");
+    });
 }
 @end

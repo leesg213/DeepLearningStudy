@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <vector>
 #include <random>
+#include <functional>
 #include <Metal/Metal.h>
 #include <simd/simd.h>
 #include "NumpyRandn.h"
@@ -20,11 +21,16 @@ class DeepHiddenLayerModel
 public:
     void Init(std::vector<int> const& inLayers);
     
+    typedef std::function<void(int iteration, float cost)> CostCallback;
+    
     void TrainF(std::vector<float> const& train_x,
                std::vector<uint8_t> const& train_y,
                int num_trains,
                int numIterations,
-               float learningRate);
+               float learningRate,
+               int logInterval = 100,
+               std::vector<std::pair<int, float>>* out_costs = nullptr,
+               CostCallback costCallback = nullptr);
     
     void PredictF(std::vector<float> const& test_x,
                   int num_tests,
