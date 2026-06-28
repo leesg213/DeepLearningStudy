@@ -10,6 +10,7 @@
 #include <vector>
 #include <H5Cpp.h>
 #include <matio.h>
+#include "DeepHiddenLayerModel.hpp"
 
 @implementation ViewController
 {
@@ -29,8 +30,9 @@
         // Cast the internal data pointer safely
         double* data_ptr = static_cast<double*>(matvar->data);
 
-        for (size_t c = 0; c < cols; ++c) {
-            for (size_t r = 0; r < rows; ++r) {
+        for (size_t r = 0; r < rows; ++r)
+        {
+            for (size_t c = 0; c < cols; ++c) {
                 // Formula to map 2D coordinates to column-major array
                 size_t index = c * rows + r;
                 double data_entry = data_ptr[index];
@@ -107,12 +109,48 @@
     NSRect frame = self.view.bounds;
     plotView = [[DataPlotView alloc] initWithFrame:frame];
     plotView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
-    [self.view addSubview:plotView];
+    [self.view addSubview:plotView positioned:NSWindowBelow relativeTo:nil];
     
     // Pass the training data to the plot view
     [plotView setDataWithX:trainset_x labels:trainset_y];
 }
 
+- (IBAction)runDeepHiddenLayerModel:(id)sender
+{
+    // Run training on background thread to keep UI responsive
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        DeepHiddenLayerModel _DeepHiddenLayerModel;
+        
+        std::vector layers = {0, 20, 3, 1};
+        layers[0] = 2;
+        _DeepHiddenLayerModel.Init(layers);
+        
+        // Train with real-time cost updates
+        _DeepHiddenLayerModel.TrainF(trainset_x, trainset_y, 30000, 0.3f, 100, nullptr,
+            [](int iteration, float cost) {
+               // [chartWindow updateWithIteration:iteration cost:cost];
+            });
+        
+        // Prediction also on background thread
+        auto predict = [&](std::vector<float> const& set_x, std::vector<uint8_t>& set_y, std::string const& name)
+        {
+            size_t num_sets = set_y.size();
+            
+            std::vector<float> results;
+            _DeepHiddenLayerModel.PredictF(set_x, num_sets, results);
+            int num_correct = 0;
+            for(int i = 0;i<results.size();++i)
+            {
+                int predict = results[i] >= 0.5f;
+                if(predict == set_y[i]) num_correct++;
+            }
+            NSLog(@"[%s] Predict : %d / %d (%.3f%)", name.c_str(), num_correct, results.size(), num_correct/((float)results.size())*100.0f);
+        };
+        
+        predict(trainset_x, trainset_y, "TrainSet");
+        predict(testset_x, testset_y, "TestSet");
+    });
+}
 
 - (void)setRepresentedObject:(id)representedObject {
     [super setRepresentedObject:representedObject];

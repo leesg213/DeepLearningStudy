@@ -53,7 +53,7 @@ void DeepHiddenLayerModel::Init(std::vector<int> const& inLayers)
         NSLog(@"Failed to load pipeline. %@", error.localizedDescription);
     }
 
-    Random.seed(1);
+    Random.seed(3);
 }
 
 float DeepHiddenLayerModel::ComputeCost(id<MTLBuffer> activation, size_t activationOffset, std::vector<uint8_t> const& label)
@@ -175,7 +175,6 @@ void DeepHiddenLayerModel::PredictF(std::vector<float> const& test_x,
 
 void DeepHiddenLayerModel::TrainF(std::vector<float> const& train_x,
                                     std::vector<uint8_t> const& train_y,
-                                    int num_trains,
                                     int numIterations,
                                     float learningRate,
                                     int logInterval,
@@ -184,7 +183,7 @@ void DeepHiddenLayerModel::TrainF(std::vector<float> const& train_x,
 {
     // Start timing
     auto startTime = std::chrono::high_resolution_clock::now();
-    
+    int num_trains = train_y.size();
     id<MTLBuffer> uniforms = [_device newBufferWithLength:sizeof(Uniforms) options:MTLResourceStorageModeShared];
     Uniforms* uniforms_data = (Uniforms*)uniforms.contents;
     uniforms_data->numImages = num_trains;

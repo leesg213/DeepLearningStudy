@@ -25,7 +25,6 @@ public:
     
     void TrainF(std::vector<float> const& train_x,
                std::vector<uint8_t> const& train_y,
-               int num_trains,
                int numIterations,
                float learningRate,
                int logInterval = 100,

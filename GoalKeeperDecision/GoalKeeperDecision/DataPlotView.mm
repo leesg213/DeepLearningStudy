@@ -46,8 +46,8 @@
     float minY = INFINITY, maxY = -INFINITY;
     
     for (size_t i = 0; i < numPoints; ++i) {
-        float x = dataX[i];
-        float y = dataX[i + halfSize];
+        float x = dataX[i*2+0];
+        float y = dataX[i*2+1];
         
         if (x < minX) minX = x;
         if (x > maxX) maxX = x;
@@ -77,8 +77,8 @@
     
     // Draw each point
     for (size_t i = 0; i < numPoints; ++i) {
-        float x = dataX[i];
-        float y = dataX[i + halfSize];
+        float x = dataX[i*2+0];
+        float y = dataX[i*2+1];
         uint8_t label = dataLabels[i];
         
         // Normalize coordinates to [0, 1]
