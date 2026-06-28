@@ -365,8 +365,11 @@ kernel void deep_compute_grad(device float* activations [[buffer(0)]],
         
         atomic_fetch_add_explicit(outGrads+grad_index, grad, memory_order_relaxed);
         
-        float dA_Prev = dZ * weights[num_weights_per_node*node_id+weight_id+1];
-        atomic_fetch_add_explicit(dActivationsPrevLayer+dataset_id*n_prev+weight_id, dA_Prev, memory_order_relaxed);
+        if(layerID > 1)
+        {
+            float dA_Prev = dZ * weights[num_weights_per_node*node_id+weight_id+1];
+            atomic_fetch_add_explicit(dActivationsPrevLayer+dataset_id*n_prev+weight_id, dA_Prev, memory_order_relaxed);
+        }
         
         ++grad_index;
     }
