@@ -9,6 +9,7 @@
 #include "ShaderTypes.h"
 #include <chrono>
 
+
 static int capture_trace_iter = -1;
 
 void DeepHiddenLayerModel::Init(std::vector<int> const& inLayers)
@@ -63,13 +64,8 @@ void DeepHiddenLayerModel::Init(std::vector<int> const& inLayers)
     {
         NSLog(@"Failed to load pipeline. %@", error.localizedDescription);
     }
-    
-    // Initialize random number generator with a random seed
-    _rng = std::mt19937(std::random_device{}());
-    _normalDist = std::normal_distribution<float>(0.0f, 1.0f);
-    _rngInitialized = true;
-    
-    
+
+    Random.seed(1);
 }
 
 float DeepHiddenLayerModel::ComputeCost(id<MTLBuffer> activation, size_t activationOffset, std::vector<uint8_t> const& label)
@@ -226,8 +222,6 @@ void DeepHiddenLayerModel::TrainF(std::vector<float> const& train_x,
     memcpy(train_y_data_buffer.contents, &train_y[0], num_trains);
     
     id<MTLBuffer> weights = [_device newBufferWithLength:num_total_weights*sizeof(float) options:MTLResourceStorageModeShared];
-    std::vector<float> random_weights = randn(num_total_weights);
-    memcpy(weights.contents, random_weights.data(), weights.length);
     float* weights_values = (float*)weights.contents;
     {
         int weight_offset = 0;
@@ -237,10 +231,13 @@ void DeepHiddenLayerModel::TrainF(std::vector<float> const& train_x,
             
             for(int j = 0;j<Layers[layer];++j)
             {
-                for(int k = 0;k<weights_per_node-1;++k)
+                std::vector<float> random_weights = Random.randnf(weights_per_node-1);
+                for(int k = 0;k<random_weights.size();++k)
                 {
-                    weights_values[weight_offset+k+1] /= sqrt(Layers[layer-1]);
+                    random_weights[k] /= sqrt(Layers[layer-1]);
                 }
+                memcpy(&weights_values[weight_offset+1], random_weights.data(), sizeof(float)*random_weights.size());
+                
                 weights_values[weight_offset] = 0; // set b to 0
                 weight_offset += weights_per_node;
             }
@@ -444,40 +441,5 @@ void DeepHiddenLayerModel::TrainF(std::vector<float> const& train_x,
     NSLog(@"Total training time: %.3f seconds (%.2f ms)", seconds, (double)duration.count());
     NSLog(@"Time per iteration: %.3f ms", (double)duration.count() / numIterations);
     NSLog(@"====================================");
-}
-#pragma mark - Random Number Generation (np.random.randn port)
-
-void DeepHiddenLayerModel::seed(unsigned int seedValue)
-{
-    _rng.seed(seedValue);
-    _normalDist.reset();
-    _rngInitialized = true;
-}
-
-float DeepHiddenLayerModel::randn()
-{
-    if (!_rngInitialized) {
-        // Initialize with random seed if not already initialized
-        _rng = std::mt19937(std::random_device{}());
-        _normalDist = std::normal_distribution<float>(0.0f, 1.0f);
-        _rngInitialized = true;
-    }
-    return _normalDist(_rng);
-}
-
-std::vector<float> DeepHiddenLayerModel::randn(size_t size)
-{
-    if (!_rngInitialized) {
-        // Initialize with random seed if not already initialized
-        _rng = std::mt19937(std::random_device{}());
-        _normalDist = std::normal_distribution<float>(0.0f, 1.0f);
-        _rngInitialized = true;
-    }
-    
-    std::vector<float> result(size);
-    for (size_t i = 0; i < size; ++i) {
-        result[i] = _normalDist(_rng);
-    }
-    return result;
 }
 

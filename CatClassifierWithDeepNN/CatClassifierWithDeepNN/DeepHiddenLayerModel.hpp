@@ -13,6 +13,7 @@
 #include <random>
 #include <Metal/Metal.h>
 #include <simd/simd.h>
+#include "NumpyRandn.h"
 
 class DeepHiddenLayerModel
 {
@@ -29,17 +30,6 @@ public:
                   int num_tests,
                  std::vector<float>& out_results);
     
-    // Port of np.random.randn() - generates random numbers from standard normal distribution
-    // Returns a single random value
-    float randn();
-    
-    // Port of np.random.randn(d0, d1, ...) - generates array of random values
-    // Returns a vector of random values from standard normal distribution
-    std::vector<float> randn(size_t size);
-    
-    // Set random seed for reproducibility (equivalent to np.random.seed())
-    void seed(unsigned int seedValue);
-    
 private:
     id<MTLDevice> _device;
     id<MTLCommandQueue> _cmdQueue;
@@ -52,10 +42,7 @@ private:
     
     std::vector<int> Layers;
     
-    // Random number generator for randn()
-    std::mt19937 _rng;
-    std::normal_distribution<float> _normalDist;
-    bool _rngInitialized;
+    NumpyRandn Random;
 };
 
 
