@@ -34,7 +34,7 @@ private:
     id<MTLDevice> _device;
     id<MTLCommandQueue> _cmdQueue;
     
-    id<MTLComputePipelineState> _pipelineDeepForwardRelu, _pipelineDeepForwardSigmoid, _pipelineDeepComputeDAL, _pipelineDeepComputeGradSigmoid, _pipelineDeepComputeGradRelu, _pipelineOptimize, _pipelineClearGrads;
+    id<MTLComputePipelineState> _pipelineDeepForward, _pipelineDeepComputeDAL, _pipelineDeepComputeGrad, _pipelineOptimize, _pipelineClearGrads;
     
     std::vector<float> _weights;
     

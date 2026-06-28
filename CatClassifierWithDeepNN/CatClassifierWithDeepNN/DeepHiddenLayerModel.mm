@@ -23,13 +23,7 @@ void DeepHiddenLayerModel::Init(std::vector<int> const& inLayers)
     
     NSError* error = nil;
     
-    _pipelineDeepForwardRelu = [_device newComputePipelineStateWithFunction:[defaultLibrary newFunctionWithName:@"deep_forward_relu"] error:&error];
-    if(error != nil)
-    {
-        NSLog(@"Failed to load pipeline. %@", error.localizedDescription);
-    }
-    
-    _pipelineDeepForwardSigmoid = [_device newComputePipelineStateWithFunction:[defaultLibrary newFunctionWithName:@"deep_forward_sigmoid"] error:&error];
+    _pipelineDeepForward = [_device newComputePipelineStateWithFunction:[defaultLibrary newFunctionWithName:@"deep_forward"] error:&error];
     if(error != nil)
     {
         NSLog(@"Failed to load pipeline. %@", error.localizedDescription);
@@ -41,13 +35,7 @@ void DeepHiddenLayerModel::Init(std::vector<int> const& inLayers)
         NSLog(@"Failed to load pipeline. %@", error.localizedDescription);
     }
     
-    _pipelineDeepComputeGradRelu = [_device newComputePipelineStateWithFunction:[defaultLibrary newFunctionWithName:@"deep_compute_grad_relu"] error:&error];
-    if(error != nil)
-    {
-        NSLog(@"Failed to load pipeline. %@", error.localizedDescription);
-    }
-    
-    _pipelineDeepComputeGradSigmoid = [_device newComputePipelineStateWithFunction:[defaultLibrary newFunctionWithName:@"deep_compute_grad_sigmoid"] error:&error];
+    _pipelineDeepComputeGrad = [_device newComputePipelineStateWithFunction:[defaultLibrary newFunctionWithName:@"deep_compute_grad"] error:&error];
     if(error != nil)
     {
         NSLog(@"Failed to load pipeline. %@", error.localizedDescription);
@@ -101,6 +89,10 @@ void DeepHiddenLayerModel::PredictF(std::vector<float> const& test_x,
         *(((int*)layerIDs_buffer.contents)+i) = i;
     }
     
+    id<MTLBuffer> activation_types_buffer = [_device newBufferWithLength:sizeof(int)*2 options:MTLResourceStorageModeShared];
+    *(((int*)activation_types_buffer.contents)+0) = 0;
+    *(((int*)activation_types_buffer.contents)+1) = 1;
+    
     id<MTLBuffer> layers_buffer = [_device newBufferWithLength:Layers.size()*sizeof(int) options:MTLResourceStorageModeShared];
     memcpy(layers_buffer.contents, Layers.data(), layers_buffer.length);
     
@@ -134,7 +126,7 @@ void DeepHiddenLayerModel::PredictF(std::vector<float> const& test_x,
         {
             [encoder pushDebugGroup:[NSString stringWithFormat:@"[Forward Layer %d]", layer]];
             
-            [encoder setComputePipelineState:(layer < Layers.size()-1) ? _pipelineDeepForwardRelu : _pipelineDeepForwardSigmoid];
+            [encoder setComputePipelineState:_pipelineDeepForward];
             
             if(layer == 1)
             {
@@ -149,6 +141,9 @@ void DeepHiddenLayerModel::PredictF(std::vector<float> const& test_x,
             [encoder setBuffer:Zvalues offset:activation_offset*sizeof(float) atIndex:3];
             [encoder setBuffer:layerIDs_buffer offset:layer*sizeof(int) atIndex:4];
             [encoder setBuffer:layers_buffer offset:0 atIndex:5];
+            
+            int activation_type_offset = layer < Layers.size()-1 ? 0 : 1;
+            [encoder setBuffer:activation_types_buffer offset:activation_type_offset*sizeof(int) atIndex:6];
             
             [encoder dispatchThreads:MTLSizeMake(num_tests * Layers[layer], 1, 1) threadsPerThreadgroup:MTLSizeMake(32, 1, 1)];
             
@@ -205,6 +200,10 @@ void DeepHiddenLayerModel::TrainF(std::vector<float> const& train_x,
         *(((int*)layerIDs_buffer.contents)+i) = i;
     }
     
+    id<MTLBuffer> activation_types_buffer = [_device newBufferWithLength:sizeof(int)*2 options:MTLResourceStorageModeShared];
+    *(((int*)activation_types_buffer.contents)+0) = 0;
+    *(((int*)activation_types_buffer.contents)+1) = 1;
+
     id<MTLBuffer> layers_buffer = [_device newBufferWithLength:Layers.size()*sizeof(int) options:MTLResourceStorageModeShared];
     memcpy(layers_buffer.contents, Layers.data(), layers_buffer.length);
     
@@ -262,6 +261,7 @@ void DeepHiddenLayerModel::TrainF(std::vector<float> const& train_x,
                 {
                     [cmdBuffer commit];
                     [cmdBuffer waitUntilCompleted];
+                    cmdBuffer = nil;
                     
                     float cost = ComputeCost(outActivations, last_activation_offset, train_y);
                     NSLog(@"[%d] Cost : %f",iter, cost);
@@ -306,7 +306,7 @@ void DeepHiddenLayerModel::TrainF(std::vector<float> const& train_x,
             {
                 [encoder pushDebugGroup:[NSString stringWithFormat:@"[Forward Layer %d]", layer]];
                 
-                [encoder setComputePipelineState:(layer < Layers.size()-1) ? _pipelineDeepForwardRelu : _pipelineDeepForwardSigmoid];
+                [encoder setComputePipelineState:_pipelineDeepForward];
                 
                 if(layer == 1)
                 {
@@ -321,6 +321,9 @@ void DeepHiddenLayerModel::TrainF(std::vector<float> const& train_x,
                 [encoder setBuffer:Zvalues offset:activation_offset*sizeof(float) atIndex:3];
                 [encoder setBuffer:layerIDs_buffer offset:layer*sizeof(int) atIndex:4];
                 [encoder setBuffer:layers_buffer offset:0 atIndex:5];
+                
+                int activation_type_offset = layer < Layers.size()-1 ? 0 : 1;
+                [encoder setBuffer:activation_types_buffer offset:activation_type_offset*sizeof(int) atIndex:6];
                 
                 [encoder dispatchThreads:MTLSizeMake(num_trains * Layers[layer], 1, 1) threadsPerThreadgroup:MTLSizeMake(32, 1, 1)];
                 
@@ -353,7 +356,7 @@ void DeepHiddenLayerModel::TrainF(std::vector<float> const& train_x,
             {
                 [encoder pushDebugGroup:[NSString stringWithFormat:@"[Backward Layer %d]", layer]];
                 
-                [encoder setComputePipelineState:(layer < Layers.size()-1) ? _pipelineDeepComputeGradRelu : _pipelineDeepComputeGradSigmoid];
+                [encoder setComputePipelineState:_pipelineDeepComputeGrad];
                 
                 [encoder setBuffer:outActivations offset:sizeof(float)*(activation_offset) atIndex:0];
                 
@@ -373,6 +376,9 @@ void DeepHiddenLayerModel::TrainF(std::vector<float> const& train_x,
                 [encoder setBuffer:layerIDs_buffer offset:layer*sizeof(int) atIndex:6];
                 [encoder setBuffer:layers_buffer offset:0 atIndex:7];
                 [encoder setBuffer:outGrads offset:weight_offset*sizeof(float) atIndex:8];
+                
+                int activation_type_offset = layer < Layers.size()-1 ? 0 : 1;
+                [encoder setBuffer:activation_types_buffer offset:activation_type_offset*sizeof(int) atIndex:9];
                 
                 [encoder dispatchThreads:MTLSizeMake(num_trains* Layers[layer], 1, 1) threadsPerThreadgroup:MTLSizeMake(32, 1, 1)];
                 
