@@ -239,7 +239,7 @@
     }
     
     // Draw statistics panel
-    CGRect statsRect = NSMakeRect(leftMargin, bottomMargin, 
+    CGRect statsRect = NSMakeRect(leftMargin, bottomMargin-50, 
                                  self.bounds.size.width - leftMargin - rightMargin, 
                                  statsHeight - 20);
     

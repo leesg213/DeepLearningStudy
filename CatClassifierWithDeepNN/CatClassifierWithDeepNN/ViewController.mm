@@ -125,7 +125,7 @@
         //_DeepHiddenLayerModel.Init({12288, 77, 1});
         
         // Train with real-time cost updates
-        _DeepHiddenLayerModel.TrainF(trainset_x, trainset_y, num_trainset, 2500, 0.0075f, 10, nullptr,
+        _DeepHiddenLayerModel.TrainF(trainset_x, trainset_y, num_trainset, 2500, 0.0075f, 100, nullptr,
             [chartWindow](int iteration, float cost) {
                 [chartWindow updateWithIteration:iteration cost:cost];
             });
