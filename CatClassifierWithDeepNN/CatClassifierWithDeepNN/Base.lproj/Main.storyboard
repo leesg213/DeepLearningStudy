@@ -728,7 +728,7 @@
                                     <font key="font" metaFont="system"/>
                                 </buttonCell>
                                 <connections>
-                                    <action selector="start:" target="XfG-lQ-9wD" id="whp-1L-Cim"/>
+                                    <action selector="runDeepHiddenLayerModel:" target="XfG-lQ-9wD" id="4JC-oH-DuS"/>
                                 </connections>
                             </button>
                         </subviews>

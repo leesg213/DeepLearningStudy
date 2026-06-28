@@ -9,6 +9,7 @@
 #include <vector>
 #include <H5Cpp.h>
 #include "OneHiddenLayerModel.hpp"
+#include "DeepHiddenLayerModel.hpp"
 
 @implementation ViewController
 {
@@ -88,16 +89,48 @@
 {
     OneHiddenLayerModel _OneHiddenLayerModel;
     _OneHiddenLayerModel.Init();
-    _OneHiddenLayerModel.TrainF(trainset_x, trainset_y, 3, num_trainset, num_features, 2500, 0.0075f);
+    _OneHiddenLayerModel.TrainF(trainset_x, trainset_y, 7, num_trainset, num_features, 2500, 0.0075f);
     
-    std::vector<float> results;
-    _OneHiddenLayerModel.PredictF(testset_x, 3, num_testset, num_features, results);
-    int num_correct = 0;
-    for(int i = 0;i<results.size();++i)
+    auto predict = [&](std::vector<float> const& set_x, std::vector<uint8_t>& set_y, int num_sets, std::string const& name)
     {
-        int predict = results[i] >= 0.5f;
-        if(predict == testset_y[i]) num_correct++;
-    }
-    NSLog(@"Num Correct : %d / %d", num_correct, results.size());
+        std::vector<float> results;
+        _OneHiddenLayerModel.PredictF(set_x, 7, num_sets, num_features, results);
+        int num_correct = 0;
+        for(int i = 0;i<results.size();++i)
+        {
+            int predict = results[i] >= 0.5f;
+            if(predict == set_y[i]) num_correct++;
+        }
+        NSLog(@"[%s] Predict : %d / %d (%.3f%)", name.c_str(), num_correct, results.size(), num_correct/((float)results.size())*100.0f);
+    };
+    
+    predict(trainset_x, trainset_y, num_trainset, "TrainSet");
+    predict(testset_x, testset_y, num_testset, "TestSet");
+
+}
+
+- (IBAction)runDeepHiddenLayerModel:(id)sender
+{
+    DeepHiddenLayerModel _DeepHiddenLayerModel;
+    
+    _DeepHiddenLayerModel.Init({12288, 20, 7, 5, 1});
+    //_DeepHiddenLayerModel.Init({12288, 77, 1});
+    _DeepHiddenLayerModel.TrainF(trainset_x, trainset_y, num_trainset, 2500, 0.0075f);
+    
+    auto predict = [&](std::vector<float> const& set_x, std::vector<uint8_t>& set_y, int num_sets, std::string const& name)
+    {
+        std::vector<float> results;
+        _DeepHiddenLayerModel.PredictF(set_x, num_sets, results);
+        int num_correct = 0;
+        for(int i = 0;i<results.size();++i)
+        {
+            int predict = results[i] >= 0.5f;
+            if(predict == set_y[i]) num_correct++;
+        }
+        NSLog(@"[%s] Predict : %d / %d (%.3f%)", name.c_str(), num_correct, results.size(), num_correct/((float)results.size())*100.0f);
+    };
+    
+    predict(trainset_x, trainset_y, num_trainset, "TrainSet");
+    predict(testset_x, testset_y, num_testset, "TestSet");
 }
 @end

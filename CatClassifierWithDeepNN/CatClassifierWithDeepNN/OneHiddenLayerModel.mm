@@ -67,7 +67,7 @@ void OneHiddenLayerModel::PredictF(std::vector<float> const& test_x,
                                    int hidden_layer_size,
                                       int num_tests,
                                       int num_features,
-                                      std::vector<float>& out_results)
+                                      std::vector<float>& out_results) const
 {
     
     out_results.clear();

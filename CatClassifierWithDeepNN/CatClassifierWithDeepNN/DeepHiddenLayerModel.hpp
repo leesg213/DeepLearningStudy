@@ -1,12 +1,12 @@
 //
-//  OneHiddenLayerModel.hpp
-//  PlanarDataClassificationWithOneHiddenLayer
+//  DeepHiddenLayerModel.hpp
+//  PlanarDataClassificationWithDeepHiddenLayer
 //
 //  Created by Sugu Lee on 6/20/26.
 //
 
-#ifndef OneHiddenLayerModel_hpp
-#define OneHiddenLayerModel_hpp
+#ifndef DeepHiddenLayerModel_hpp
+#define DeepHiddenLayerModel_hpp
 
 #include <stdio.h>
 #include <vector>
@@ -14,24 +14,20 @@
 #include <Metal/Metal.h>
 #include <simd/simd.h>
 
-class OneHiddenLayerModel
+class DeepHiddenLayerModel
 {
 public:
-    void Init();
+    void Init(std::vector<int> const& inLayers);
     
     void TrainF(std::vector<float> const& train_x,
                std::vector<uint8_t> const& train_y,
-                int hidden_layer_size,
                int num_trains,
-               int num_features,
                int numIterations,
                float learningRate);
     
     void PredictF(std::vector<float> const& test_x,
-                  int hidden_layer_size,
                   int num_tests,
-                  int num_features,
-                 std::vector<float>& out_results) const;
+                 std::vector<float>& out_results);
     
     // Port of np.random.randn() - generates random numbers from standard normal distribution
     // Returns a single random value
@@ -48,11 +44,13 @@ private:
     id<MTLDevice> _device;
     id<MTLCommandQueue> _cmdQueue;
     
-    id<MTLComputePipelineState> _pipelineComputeCostF_1HiddenLayer, _pipelineComputeGradsF_1HiddenLayer, _pipelineOptimize, _pipelineClearGrads;
+    id<MTLComputePipelineState> _pipelineDeepForwardRelu, _pipelineDeepForwardSigmoid, _pipelineDeepComputeDAL, _pipelineDeepComputeGradSigmoid, _pipelineDeepComputeGradRelu, _pipelineOptimize, _pipelineClearGrads;
     
     std::vector<float> _weights;
     
-    float CalcCost(id<MTLBuffer> allCosts, size_t num_trains);
+    float ComputeCost(id<MTLBuffer> activation, size_t activationOffset, std::vector<uint8_t> const& label);
+    
+    std::vector<int> Layers;
     
     // Random number generator for randn()
     std::mt19937 _rng;
@@ -61,4 +59,4 @@ private:
 };
 
 
-#endif /* OneHiddenLayerModel_hpp */
+#endif /* DeepHiddenLayerModel_hpp */
