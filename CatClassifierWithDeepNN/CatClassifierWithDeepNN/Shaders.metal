@@ -275,35 +275,35 @@ kernel void optimize(device float* weights [[buffer(0)]],
     weights[thread_id] = weights[thread_id] - uniforms.learning_rate * outGrads[thread_id] / uniforms.numImages;
 }
 
+
 kernel void deep_forward_relu(device float* in_A_Prev [[buffer(0)]],
                         device float* weights [[buffer(1)]],
                         device float* outActivations [[buffer(2)]],
-                      device float* outZvalues [[buffer(3)]],
+                         device float* outZvalues [[buffer(3)]],
                         device int& layerID [[buffer(4)]],
                         device int* layers [[buffer(5)]],
                         uint thread_id [[thread_position_in_grid]])
 {
-    uint dataset_id = thread_id;
     uint n_current = layers[layerID];
+    uint dataset_id = (uint)(thread_id/n_current);
+    uint node_id = thread_id%n_current;
     uint n_prev = layers[layerID - 1];
     
     uint num_weights_per_node = (n_prev+1);
     
-    for(uint i = 0;i<n_current;++i)
+    float z = 0;
+    for(uint j = 0;j<n_prev+1;++j)
     {
-        float z = 0;
-        for(uint j = 0;j<n_prev+1;++j)
-        {
-            float a_prev = j == 0 ? 1 : in_A_Prev[n_prev*dataset_id+j-1];
-            z += weights[num_weights_per_node*i+j] * a_prev;
-        }
-        
-        float a = max(0.0f, z); // relu
-        
-        outZvalues[n_current*dataset_id+i] = z;
-        outActivations[n_current*dataset_id+i] = a;
+        float a_prev = j == 0 ? 1 : in_A_Prev[n_prev*dataset_id+j-1];
+        z += weights[num_weights_per_node*node_id+j] * a_prev;
     }
+    
+    float a = max(0.0f, z); // relu
+    
+    outZvalues[n_current*dataset_id+node_id] = z;
+    outActivations[n_current*dataset_id+node_id] = a;
 }
+
 kernel void deep_forward_sigmoid(device float* in_A_Prev [[buffer(0)]],
                         device float* weights [[buffer(1)]],
                         device float* outActivations [[buffer(2)]],
@@ -312,26 +312,24 @@ kernel void deep_forward_sigmoid(device float* in_A_Prev [[buffer(0)]],
                         device int* layers [[buffer(5)]],
                         uint thread_id [[thread_position_in_grid]])
 {
-    uint dataset_id = thread_id;
     uint n_current = layers[layerID];
+    uint dataset_id = (uint)(thread_id/n_current);
+    uint node_id = thread_id%n_current;
     uint n_prev = layers[layerID - 1];
     
     uint num_weights_per_node = (n_prev+1);
     
-    for(uint i = 0;i<n_current;++i)
+    float z = 0;
+    for(uint j = 0;j<n_prev+1;++j)
     {
-        float z = 0;
-        for(uint j = 0;j<n_prev+1;++j)
-        {
-            float a_prev = j == 0 ? 1 : in_A_Prev[n_prev*dataset_id+j-1];
-            z += weights[num_weights_per_node*i+j] * a_prev;
-        }
-        
-        float a = sigmoid(z);
-        
-        outZvalues[n_current*dataset_id+i] = z;
-        outActivations[n_current*dataset_id+i] = a;
+        float a_prev = j == 0 ? 1 : in_A_Prev[n_prev*dataset_id+j-1];
+        z += weights[num_weights_per_node*node_id+j] * a_prev;
     }
+    
+    float a = sigmoid(z);
+    
+    outZvalues[n_current*dataset_id+node_id] = z;
+    outActivations[n_current*dataset_id+node_id] = a;
 }
 
 kernel void deep_compute_dAL(device float* activations [[buffer(0)]],
@@ -360,7 +358,7 @@ float sigmoid_backward(float Z, float dA)
 kernel void deep_compute_grad_sigmoid(device float* activations [[buffer(0)]],
                                       device float* activations_prev [[buffer(1)]],
                          device float* dActivations [[buffer(2)]],
-                           device float* dActivationsPrevLayer [[buffer(3)]],
+                           device atomic_float* dActivationsPrevLayer [[buffer(3)]],
                                       device float* Zvalues [[buffer(4)]],
                                       device float* weights [[buffer(5)]],
                                       device int& layerID [[buffer(6)]],
@@ -368,49 +366,43 @@ kernel void deep_compute_grad_sigmoid(device float* activations [[buffer(0)]],
                                       device atomic_float* outGrads [[buffer(8)]],
                         uint thread_id [[thread_position_in_grid]])
 {
-    uint dataset_id = thread_id;
     uint n_current = layers[layerID];
+    uint dataset_id = (uint)(thread_id/n_current);
+    uint node_id = thread_id%n_current;
     uint n_prev = layers[layerID - 1];
     uint num_weights_per_node = (n_prev+1);
     
-    uint grad_index = 0;
+    uint grad_index = node_id*num_weights_per_node;
+    
+    float Z = Zvalues[dataset_id*n_current+node_id];
+    float dA = dActivations[dataset_id*n_current+node_id];
+    float dZ = sigmoid_backward(Z, dA);
+    
+    {
+        float grad = dZ;
+        atomic_fetch_add_explicit(outGrads+grad_index, grad, memory_order_relaxed);
+        ++grad_index;
+    }
     
     for(int weight_id = 0;weight_id<n_prev;++weight_id)
     {
-        dActivationsPrevLayer[dataset_id*n_prev+weight_id] = 0;
-    }
-    
-    for(int node = 0;node<n_current;++node)
-    {
-        float A = activations[dataset_id*n_current+node];
-        float Z = Zvalues[dataset_id*n_current+node];
-        float dA = dActivations[dataset_id*n_current+node];
-        float dZ = sigmoid_backward(Z, dA);
+        float a_prev = activations_prev[dataset_id*n_prev+weight_id];
+        float grad = a_prev * dZ;
         
-        {
-            float grad = dZ;
-            atomic_fetch_add_explicit(outGrads+grad_index, grad, memory_order_relaxed);
-            ++grad_index;
-        }
+        atomic_fetch_add_explicit(outGrads+grad_index, grad, memory_order_relaxed);
         
-        for(int weight_id = 0;weight_id<n_prev;++weight_id)
-        {
-            float a_prev = activations_prev[dataset_id*n_prev+weight_id];
-            float grad = a_prev * dZ;
-            
-            atomic_fetch_add_explicit(outGrads+grad_index, grad, memory_order_relaxed);
-            
-            dActivationsPrevLayer[dataset_id*n_prev+weight_id] += dZ * weights[num_weights_per_node*node+weight_id+1];
-            
-            ++grad_index;
-        }
+        float dA_Prev = dZ * weights[num_weights_per_node*node_id+weight_id+1];
+        atomic_fetch_add_explicit(dActivationsPrevLayer+dataset_id*n_prev+weight_id, dA_Prev, memory_order_relaxed);
+        
+        ++grad_index;
     }
 }
+
 
 kernel void deep_compute_grad_relu(device float* activations [[buffer(0)]],
                                       device float* activations_prev [[buffer(1)]],
                          device float* dActivations [[buffer(2)]],
-                           device float* dActivationsPrevLayer [[buffer(3)]],
+                           device atomic_float* dActivationsPrevLayer [[buffer(3)]],
                                       device float* Zvalues [[buffer(4)]],
                                       device float* weights [[buffer(5)]],
                                       device int& layerID [[buffer(6)]],
@@ -418,41 +410,34 @@ kernel void deep_compute_grad_relu(device float* activations [[buffer(0)]],
                                       device atomic_float* outGrads [[buffer(8)]],
                         uint thread_id [[thread_position_in_grid]])
 {
-    uint dataset_id = thread_id;
     uint n_current = layers[layerID];
+    uint dataset_id = (uint)(thread_id/n_current);
+    uint node_id = thread_id%n_current;
     uint n_prev = layers[layerID - 1];
     uint num_weights_per_node = (n_prev+1);
     
-    uint grad_index = 0;
+    uint grad_index = node_id*num_weights_per_node;
+    
+    float Z = Zvalues[dataset_id*n_current+node_id];
+    float dA = dActivations[dataset_id*n_current+node_id];
+    float dZ = relu_backward(Z, dA);
+    
+    {
+        float grad = dZ;
+        atomic_fetch_add_explicit(outGrads+grad_index, grad, memory_order_relaxed);
+        ++grad_index;
+    }
     
     for(int weight_id = 0;weight_id<n_prev;++weight_id)
     {
-        dActivationsPrevLayer[dataset_id*n_prev+weight_id] = 0;
-    }
-    
-    for(int node = 0;node<n_current;++node)
-    {
-        float A = activations[dataset_id*n_current+node];
-        float Z = Zvalues[dataset_id*n_current+node];
-        float dA = dActivations[dataset_id*n_current+node];
-        float dZ = relu_backward(Z, dA);
+        float a_prev = activations_prev[dataset_id*n_prev+weight_id];
+        float grad = a_prev * dZ;
         
-        {
-            float grad = dZ;
-            atomic_fetch_add_explicit(outGrads+grad_index, grad, memory_order_relaxed);
-            ++grad_index;
-        }
+        atomic_fetch_add_explicit(outGrads+grad_index, grad, memory_order_relaxed);
         
-        for(int weight_id = 0;weight_id<n_prev;++weight_id)
-        {
-            float a_prev = activations_prev[dataset_id*n_prev+weight_id];
-            float grad = a_prev * dZ;
-            
-            atomic_fetch_add_explicit(outGrads+grad_index, grad, memory_order_relaxed);
-            
-            dActivationsPrevLayer[dataset_id*n_prev+weight_id] += dZ * weights[num_weights_per_node*node+weight_id+1];
-            
-            ++grad_index;
-        }
+        float dA_Prev = dZ * weights[num_weights_per_node*node_id+weight_id+1];
+        atomic_fetch_add_explicit(dActivationsPrevLayer+dataset_id*n_prev+weight_id, dA_Prev, memory_order_relaxed);
+        
+        ++grad_index;
     }
 }
