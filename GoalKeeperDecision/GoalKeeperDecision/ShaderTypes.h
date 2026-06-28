@@ -15,6 +15,7 @@ typedef struct
     uint32_t hidden_layer_size;
     float normalizer_scaler;
     float learning_rate;
+    float lambda;
 } Uniforms;
 
 #endif /* ShaderTypes_h */

@@ -27,6 +27,7 @@ public:
                std::vector<uint8_t> const& train_y,
                int numIterations,
                float learningRate,
+                float inLambda, // regularization parameter
                int logInterval = 100,
                std::vector<std::pair<int, float>>* out_costs = nullptr,
                CostCallback costCallback = nullptr);
@@ -43,9 +44,13 @@ private:
     
     std::vector<float> _weights;
     
-    float ComputeCost(id<MTLBuffer> activation, size_t activationOffset, std::vector<uint8_t> const& label);
+    float ComputeCost(id<MTLBuffer> activation,
+                      size_t activationOffset,
+                      std::vector<uint8_t> const& label,
+                      id<MTLBuffer> weights);
     
     std::vector<int> Layers;
+    float lambda = 0;
     
     NumpyRandn Random;
 };

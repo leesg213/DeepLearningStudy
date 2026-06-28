@@ -56,7 +56,10 @@ void DeepHiddenLayerModel::Init(std::vector<int> const& inLayers)
     Random.seed(3);
 }
 
-float DeepHiddenLayerModel::ComputeCost(id<MTLBuffer> activation, size_t activationOffset, std::vector<uint8_t> const& label)
+float DeepHiddenLayerModel::ComputeCost(id<MTLBuffer> activation,
+                                        size_t activationOffset,
+                                        std::vector<uint8_t> const& label,
+                                        id<MTLBuffer> weights)
 {
     float* activation_data = ((float*)activation.contents) + activationOffset;
     
@@ -68,6 +71,27 @@ float DeepHiddenLayerModel::ComputeCost(id<MTLBuffer> activation, size_t activat
     }
     
     cost = -cost/label.size();
+    
+    // regularization term
+    if(lambda>0)
+    {
+        float* weight_values = (float*)weights.contents;
+        int offset = 0;
+        float sum = 0;
+        for(int layer = 1;layer<Layers.size();++layer)
+        {
+            for(int weight = 0;weight<Layers[layer-1];++weight)
+            {
+                float w = weight_values[offset+1]; // +1 because 0 is bias
+                sum += w*w;
+             
+                ++offset;
+            }
+            ++offset;
+        }
+        
+        cost += lambda*sum/(2.0f*label.size());
+    }
     return cost;
 }
 void DeepHiddenLayerModel::PredictF(std::vector<float> const& test_x,
@@ -177,12 +201,16 @@ void DeepHiddenLayerModel::TrainF(std::vector<float> const& train_x,
                                     std::vector<uint8_t> const& train_y,
                                     int numIterations,
                                     float learningRate,
+                                    float inLambda,
                                     int logInterval,
                                     std::vector<std::pair<int, float>>* out_costs,
                                     CostCallback costCallback)
 {
     // Start timing
     auto startTime = std::chrono::high_resolution_clock::now();
+    
+    lambda = inLambda;
+    
     int num_trains = train_y.size();
     id<MTLBuffer> uniforms = [_device newBufferWithLength:sizeof(Uniforms) options:MTLResourceStorageModeShared];
     Uniforms* uniforms_data = (Uniforms*)uniforms.contents;
@@ -191,6 +219,7 @@ void DeepHiddenLayerModel::TrainF(std::vector<float> const& train_x,
     uniforms_data->normalizer_scaler = 1;
     uniforms_data->hidden_layer_size = 0;
     uniforms_data->learning_rate = learningRate;
+    uniforms_data->lambda = inLambda;
     
     int num_total_activations = 0;
     int num_total_weights = 0;
@@ -275,7 +304,7 @@ void DeepHiddenLayerModel::TrainF(std::vector<float> const& train_x,
                     [cmdBuffer waitUntilCompleted];
                     cmdBuffer = nil;
                     
-                    float cost = ComputeCost(outActivations, last_activation_offset, train_y);
+                    float cost = ComputeCost(outActivations, last_activation_offset, train_y, weights);
                     NSLog(@"[%d] Cost : %f",iter, cost);
                     
                     // Store cost if output vector is provided
@@ -430,7 +459,7 @@ void DeepHiddenLayerModel::TrainF(std::vector<float> const& train_x,
             [cmdBuffer commit];
             [cmdBuffer waitUntilCompleted];
             
-            float cost = ComputeCost(outActivations, last_activation_offset, train_y);
+            float cost = ComputeCost(outActivations, last_activation_offset, train_y, weights);
             NSLog(@"[%d] Cost : %f",iter, cost);
         }
         

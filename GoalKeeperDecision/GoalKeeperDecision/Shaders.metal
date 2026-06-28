@@ -272,7 +272,7 @@ kernel void optimize(device float* weights [[buffer(0)]],
                      constant Uniforms& uniforms [[buffer(2)]],
                      uint thread_id [[thread_position_in_grid]])
 {
-    weights[thread_id] = weights[thread_id] - uniforms.learning_rate * outGrads[thread_id] / uniforms.numImages;
+    weights[thread_id] = weights[thread_id] - uniforms.learning_rate * (outGrads[thread_id]+weights[thread_id]*uniforms.lambda) / uniforms.numImages;
 }
 
 kernel void deep_forward(device float* in_A_Prev [[buffer(0)]],
