@@ -11,12 +11,22 @@
 {
     std::vector<float> dataX;
     std::vector<uint8_t> dataLabels;
+    
+    std::vector<float> decisionBoundaryX;
+    std::vector<uint8_t> decisionBoundaryLabels;
 }
 
 - (void)setDataWithX:(const std::vector<float>&)x labels:(const std::vector<uint8_t>&)labels
 {
     dataX = x;
     dataLabels = labels;
+    [self setNeedsDisplay:YES];
+}
+- (void)plotDecisionBoundary:(const std::vector<float>&)x labels:(const std::vector<uint8_t>&)labels
+{
+    decisionBoundaryX = x;
+    decisionBoundaryLabels = labels;
+    
     [self setNeedsDisplay:YES];
 }
 
@@ -74,6 +84,45 @@
     
     // Disc radius
     CGFloat discRadius = 4.0;
+    
+    // Draw decision boundary
+    {
+        
+        // Draw each point
+        for (size_t i = 0; i < decisionBoundaryLabels.size(); ++i) {
+            float x = decisionBoundaryX[i*2+0];
+            float y = decisionBoundaryX[i*2+1];
+            uint8_t label = decisionBoundaryLabels[i];
+            
+            // Normalize coordinates to [0, 1]
+            float normalizedX = (x - minX) / rangeX;
+            float normalizedY = (y - minY) / rangeY;
+            
+            // Map to view coordinates
+            CGFloat viewX = normalizedX * viewWidth;
+            CGFloat viewY = normalizedY * viewHeight;
+            
+            // Set color based on label (0 = red, 1 = blue)
+            NSColor* color;
+            if (label == 0) {
+                color = [NSColor yellowColor];
+            } else if (label == 1) {
+                color = [NSColor cyanColor];
+            } else {
+                color = [NSColor grayColor]; // fallback for unexpected labels
+            }
+            
+            [color setFill];
+            
+            // Draw disc
+            NSRect discRect = NSMakeRect(viewX - discRadius,
+                                         viewY - discRadius,
+                                         discRadius * 2,
+                                         discRadius * 2);
+            NSBezierPath* circle = [NSBezierPath bezierPathWithOvalInRect:discRect];
+            [circle fill];
+        }
+    }
     
     // Draw each point
     for (size_t i = 0; i < numPoints; ++i) {

@@ -13,7 +13,7 @@ NS_ASSUME_NONNULL_BEGIN
 @interface DataPlotView : NSView
 
 - (void)setDataWithX:(const std::vector<float>&)x labels:(const std::vector<uint8_t>&)labels;
-
+- (void)plotDecisionBoundary:(const std::vector<float>&)x labels:(const std::vector<uint8_t>&)labels;
 @end
 
 NS_ASSUME_NONNULL_END

@@ -118,7 +118,7 @@
 - (IBAction)runDeepHiddenLayerModel:(id)sender
 {
     // Run training on background thread to keep UI responsive
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+   // dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         DeepHiddenLayerModel _DeepHiddenLayerModel;
         
         std::vector layers = {0, 20, 3, 1};
@@ -130,6 +130,37 @@
             [](int iteration, float cost) {
                // [chartWindow updateWithIteration:iteration cost:cost];
             });
+        
+        // Plot decision boundary
+        {
+            std::vector<float> dataset_x;
+            std::vector<float> predict;
+            float x_min = -0.8f;
+            float x_max = 0.5f;
+            float y_min = -0.75f;
+            float y_max = 0.75f;
+            int num_points = 100;
+            float interval_x = (x_max-x_min) / num_points;
+            float interval_y = (y_max-y_min) / num_points;
+            for(float x = x_min;x<x_max; x+= interval_x)
+            {
+                for(float y = y_min;y<y_max; y+= interval_y)
+                {
+                    dataset_x.push_back(x);
+                    dataset_x.push_back(y);
+                }
+            }
+            
+            _DeepHiddenLayerModel.PredictF(dataset_x, dataset_x.size()/2, predict);
+            
+            std::vector<uint8_t> labels;
+            for(int i = 0;i<predict.size();++i)
+            {
+                labels.push_back(predict[i] >0.5f ? 1 : 0);
+            }
+            
+            [plotView plotDecisionBoundary:dataset_x labels:labels];
+        }
         
         // Prediction also on background thread
         auto predict = [&](std::vector<float> const& set_x, std::vector<uint8_t>& set_y, std::string const& name)
@@ -149,7 +180,7 @@
         
         predict(trainset_x, trainset_y, "TrainSet");
         predict(testset_x, testset_y, "TestSet");
-    });
+   // });
 }
 
 - (void)setRepresentedObject:(id)representedObject {
